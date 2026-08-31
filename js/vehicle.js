@@ -8,6 +8,8 @@ export const CATALOG = [
   { name: 'Vesper',   kind: 'sport', accel: 38, top: 46, turn: 2.7, colors: [0xc23b22, 0x1f6f8b, 0xd8d8d8] },
 ];
 
+export const COP_SPEC = { name: 'Patrol', kind: 'sedan', accel: 30, top: 38, turn: 2.5, colors: [0xe8e8e8], cop: true };
+
 const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.32, 10);
 wheelGeo.rotateZ(Math.PI / 2);
 const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
@@ -41,6 +43,21 @@ export function makeCarMesh(spec, colorHex) {
     const sign = box(0.8, 0.28, 0.5, 0x222222);
     sign.position.set(0, cab.position.y + dims.cabH / 2 + 0.16, dims.cabZ);
     g.add(sign);
+  }
+
+  if (spec.cop) {
+    const stripe = box(dims.W + 0.04, 0.3, dims.L * 0.55, 0x1a1a1a);
+    stripe.position.set(0, body.position.y, 0);
+    g.add(stripe);
+    const redMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
+    const blueMat = new THREE.MeshBasicMaterial({ color: 0x000055 });
+    const red = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.4), redMat);
+    const blue = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.4), blueMat);
+    const barY = cab.position.y + dims.cabH / 2 + 0.13;
+    red.position.set(-0.35, barY, dims.cabZ);
+    blue.position.set(0.35, barY, dims.cabZ);
+    g.add(red, blue);
+    g.userData.lights = { redMat, blueMat };
   }
 
   // headlights + brake lights (emissive toggled while braking)
@@ -81,6 +98,7 @@ export class Car {
     this.color = colorHex;
     this.mesh = makeCarMesh(spec, colorHex);
     this.mesh.position.set(x, 0, z);
+    this.mesh.rotation.order = 'YXZ';
     this.mesh.rotation.y = heading;
     scene.add(this.mesh);
     this.heading = heading;
@@ -96,7 +114,7 @@ export class Car {
     return new THREE.Vector2(-Math.sin(this.heading), -Math.cos(this.heading));
   }
 
-  drive(dt, throttle, steer, handbrake, city, hit) {
+  drive(dt, throttle, steer, handbrake, world, hit) {
     const f = this.forward();
     let vAlong = this.vel.dot(f);                         // signed forward speed
 
@@ -131,13 +149,24 @@ export class Car {
     // integrate + collide
     const nx = this.pos.x + this.vel.x * dt;
     const nz = this.pos.z + this.vel.y * dt;
-    const solved = city.resolve(nx, nz, this.radius, hit);
-    if (hit && (hit.building || hit.wall)) {
-      // crude bounce: damp velocity, reflect a bit
+    const solved = world.resolve(nx, nz, this.radius, hit);
+    if (hit && (hit.building || hit.wall || hit.tree)) {
       this.vel.multiplyScalar(-0.25);
     }
-    this.pos.set(solved.x, 0, solved.z);
+    // terrain: height, slope gravity, and body tilt
+    const g = world.groundY;
+    const y = g(solved.x, solved.z);
+    const gx = (g(solved.x + 2, solved.z) - g(solved.x - 2, solved.z)) / 4;
+    const gz = (g(solved.x, solved.z + 2) - g(solved.x, solved.z - 2)) / 4;
+    this.vel.x -= gx * 22 * dt;      // roll downhill
+    this.vel.y -= gz * 22 * dt;
+    this.pos.set(solved.x, y, solved.z);
+    const f2 = this.forward();
+    const slopeF = gx * f2.x + gz * f2.y;            // slope along facing
+    const slopeR = gx * -f2.y + gz * f2.x;           // slope to the right
     this.mesh.rotation.y = this.heading;
+    this.mesh.rotation.x += (Math.max(-0.45, Math.min(0.45, Math.atan(slopeF))) - this.mesh.rotation.x) * Math.min(1, dt * 8);
+    this.mesh.rotation.z += (Math.max(-0.45, Math.min(0.45, Math.atan(slopeR))) - this.mesh.rotation.z) * Math.min(1, dt * 8);
 
     // wheel visuals
     this.wheelSpin += vA * dt * 2.4;

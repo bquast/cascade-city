@@ -61,3 +61,54 @@ export class GameAudio {
     o.stop(t + 0.25);
   }
 }
+
+// Extensions: gunfire + siren (kept out of the class body above for patch simplicity)
+GameAudio.prototype.initExtras = function () {
+  if (!this.ready || this.extras) return;
+  const ctx = this.ctx;
+  // shared noise buffer for gunshots
+  const len = ctx.sampleRate * 0.2;
+  this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = this.noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  // siren: two-tone oscillator, silent until wanted
+  this.sirOsc = ctx.createOscillator();
+  this.sirOsc.type = 'square';
+  this.sirOsc.frequency.value = 700;
+  this.sirGain = ctx.createGain();
+  this.sirGain.gain.value = 0;
+  const sirFilter = ctx.createBiquadFilter();
+  sirFilter.type = 'lowpass';
+  sirFilter.frequency.value = 1400;
+  this.sirOsc.connect(sirFilter).connect(this.sirGain).connect(ctx.destination);
+  this.sirOsc.start();
+  this.sirT = 0;
+  this.extras = true;
+};
+
+GameAudio.prototype.gunshot = function (loud = 1) {
+  if (!this.ready) return;
+  this.initExtras();
+  const t = this.ctx.currentTime;
+  const src = this.ctx.createBufferSource();
+  src.buffer = this.noiseBuf;
+  const f = this.ctx.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(3200, t);
+  f.frequency.exponentialRampToValueAtTime(300, t + 0.16);
+  const g = this.ctx.createGain();
+  g.gain.setValueAtTime(0.22 * loud, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  src.connect(f).connect(g).connect(this.ctx.destination);
+  src.start(t);
+};
+
+GameAudio.prototype.siren = function (dt, on, dist) {
+  if (!this.ready) return;
+  this.initExtras();
+  this.sirT += dt;
+  const t = this.ctx.currentTime;
+  const vol = on ? Math.max(0, 0.05 - dist * 0.0004) : 0;
+  this.sirGain.gain.setTargetAtTime(vol, t, 0.2);
+  this.sirOsc.frequency.setTargetAtTime((this.sirT % 1.2) < 0.6 ? 720 : 960, t, 0.03);
+};

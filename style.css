@@ -81,3 +81,44 @@ html, body { height: 100%; overflow: hidden; background: var(--ink); }
 }
 #play:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 #000; }
 #play:focus-visible { outline: 3px solid #f5e9d0; outline-offset: 3px; }
+
+#stars {
+  position: absolute; right: 22px; top: 16px;
+  font-size: 34px; letter-spacing: 6px;
+  color: rgba(245, 233, 208, .35); text-shadow: 2px 2px 0 var(--ink);
+}
+#stars.hot { color: var(--amber); }
+
+#health {
+  position: absolute; right: 22px; top: 62px;
+  width: 150px; height: 12px;
+  background: rgba(20, 17, 12, .6);
+  border: 2px solid rgba(20, 17, 12, .85);
+}
+#health-fill { height: 100%; width: 100%; background: #7fae5a; }
+
+#weapon {
+  position: absolute; right: 22px; top: 84px;
+  font-size: 22px; letter-spacing: 3px; text-transform: uppercase;
+  color: #f5e9d0; text-shadow: 2px 2px 0 var(--ink);
+}
+
+#crosshair {
+  position: absolute; left: 50%; top: 50%;
+  width: 16px; height: 16px; transform: translate(-50%, -50%);
+  display: none;
+}
+#crosshair::before, #crosshair::after {
+  content: ""; position: absolute; background: #f5e9d0;
+  box-shadow: 0 0 2px var(--ink);
+}
+#crosshair::before { left: 7px; top: 0; width: 2px; height: 16px; }
+#crosshair::after { left: 0; top: 7px; width: 16px; height: 2px; }
+
+#overlay {
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+  font-size: clamp(60px, 12vw, 130px); letter-spacing: 10px; text-transform: uppercase;
+  color: #c9483a; text-shadow: 6px 6px 0 #000;
+  opacity: 0; transition: opacity .5s;
+}
+#overlay.on { opacity: 1; }

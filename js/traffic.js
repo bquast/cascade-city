@@ -189,6 +189,12 @@ export class Peds {
     }
   }
 
+  knock(p) {
+    p.mode = 'down'; p.t = 6;
+    p.mesh.rotation.x = -Math.PI / 2;
+    p.mesh.position.y += 0.2;
+  }
+
   startFlee(p, from) {
     const dx = p.mesh.position.x - from.x;
     const dz = p.mesh.position.z - from.z;
@@ -197,7 +203,7 @@ export class Peds {
     p.fleeX = dx / d; p.fleeZ = dz / d;
   }
 
-  update(dt, threatPos, threatSpeed, threatRadius, city) {
+  update(dt, threatPos, threatSpeed, threatRadius, world, onDown) {
     for (const p of this.list) {
       const M = p.mesh;
       if (p.mode === 'down') {
@@ -214,17 +220,16 @@ export class Peds {
       const distT = M.position.distanceTo(threatPos);
       // knocked down by a fast vehicle
       if (threatSpeed > 5 && distT < threatRadius + 0.5) {
-        p.mode = 'down'; p.t = 6;
-        M.rotation.x = -Math.PI / 2;
-        M.position.y = 0.5;
+        this.knock(p);
+        if (onDown) onDown(p);
         continue;
       }
       if (p.mode !== 'flee' && threatSpeed > 8 && distT < 7) this.startFlee(p, threatPos);
 
       if (p.mode === 'flee') {
         p.t -= dt;
-        const solved = city.resolve(M.position.x + p.fleeX * 7 * dt, M.position.z + p.fleeZ * 7 * dt, 0.4, null);
-        M.position.set(solved.x, 0.3, solved.z);
+        const solved = world.resolve(M.position.x + p.fleeX * 7 * dt, M.position.z + p.fleeZ * 7 * dt, 0.4, null);
+        M.position.set(solved.x, world.groundY(solved.x, solved.z) + 0.3, solved.z);
         M.rotation.y = Math.atan2(-p.fleeX, -p.fleeZ);
         p.phase += dt * 16;
         if (p.t <= 0) {

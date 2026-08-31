@@ -1,4 +1,7 @@
-import { CITY_SIZE, ORIGIN, PITCH, ROAD_W, BLOCK_W, N_BLOCKS } from './config.js';
+import { CITY_SIZE, ORIGIN, PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, roadCenter } from './config.js';
+import { groundY, WATER_Y } from './terrain.js';
+
+const VIEW = 460; // world units shown across the minimap
 
 export class Hud {
   constructor(blocks) {
@@ -8,40 +11,85 @@ export class Hud {
     this.speedVal = document.getElementById('speed-val');
     this.hintEl = document.getElementById('hint');
     this.toastEl = document.getElementById('toast');
+    this.starsEl = document.getElementById('stars');
+    this.healthEl = document.getElementById('health-fill');
+    this.weaponEl = document.getElementById('weapon');
     this.toastT = 0;
-    this.scale = this.map.width / CITY_SIZE;
+    this.lastStars = -1;
 
-    // prerender static city layer
+    // ---- prerender the whole world once ----
+    const B = 768;
     this.base = document.createElement('canvas');
-    this.base.width = this.map.width;
-    this.base.height = this.map.height;
+    this.base.width = this.base.height = B;
+    this.baseScale = B / (WORLD_HALF * 2);
     const c = this.base.getContext('2d');
+    // terrain: sample heights on a coarse grid
+    const S = 128, cell = B / S;
+    for (let a = 0; a < S; a++) {
+      for (let b = 0; b < S; b++) {
+        const x = -WORLD_HALF + (a + 0.5) * (WORLD_HALF * 2 / S);
+        const z = -WORLD_HALF + (b + 0.5) * (WORLD_HALF * 2 / S);
+        const y = groundY(x, z);
+        if (y < WATER_Y + 0.5) c.fillStyle = '#3f6d7a';
+        else if (y > 16) c.fillStyle = '#8a8078';
+        else {
+          const t = Math.max(0, Math.min(1, y / 16));
+          c.fillStyle = `rgb(${(111 + t * 32) | 0},${(138 - t * 0) | 0},${(77 - t * 0) | 0})`;
+        }
+        c.fillRect(a * cell, b * cell, cell + 1, cell + 1);
+      }
+    }
+    const w2b = (v) => (v + WORLD_HALF) * this.baseScale;
+    // country roads
+    c.strokeStyle = '#4c4a45';
+    c.lineWidth = Math.max(2, 13 * this.baseScale);
+    c.beginPath();
+    c.moveTo(w2b(roadCenter(6)), 0); c.lineTo(w2b(roadCenter(6)), B);
+    c.moveTo(0, w2b(roadCenter(6))); c.lineTo(B, w2b(roadCenter(6)));
+    c.stroke();
+    // city plate
     c.fillStyle = '#4c4a45';
-    c.fillRect(0, 0, this.base.width, this.base.height);
-    for (const b of blocks) {
-      const x = (b.i * PITCH + ROAD_W) * this.scale;
-      const y = (b.j * PITCH + ROAD_W) * this.scale;
-      const w = BLOCK_W * this.scale;
-      c.fillStyle = b.isPark ? '#5d7a45' : '#2b2925';
+    c.fillRect(w2b(ORIGIN), w2b(ORIGIN), CITY_SIZE * this.baseScale, CITY_SIZE * this.baseScale);
+    for (const bl of blocks) {
+      const x = w2b(ORIGIN + bl.i * PITCH + ROAD_W);
+      const y = w2b(ORIGIN + bl.j * PITCH + ROAD_W);
+      const w = BLOCK_W * this.baseScale;
+      c.fillStyle = bl.isPark ? '#5d7a45'
+        : bl.district === 'downtown' ? '#23211e'
+        : bl.district === 'industrial' ? '#3a3833'
+        : '#2f2d29';
       c.fillRect(x, y, w, w);
     }
   }
 
-  w2m(x, z) { return { x: (x - ORIGIN) * this.scale, y: (z - ORIGIN) * this.scale }; }
-
-  update(dt, playerPos, playerHeading, traffic, mode) {
+  update(dt, playerPos, playerHeading, traffic, police, mode) {
     const c = this.ctx;
-    c.clearRect(0, 0, this.map.width, this.map.height);
-    c.drawImage(this.base, 0, 0);
+    const M = this.map.width;
+    // scrolling window centered on the player
+    const srcW = VIEW * this.baseScale;
+    let sx = (playerPos.x + WORLD_HALF) * this.baseScale - srcW / 2;
+    let sy = (playerPos.z + WORLD_HALF) * this.baseScale - srcW / 2;
+    sx = Math.max(0, Math.min(this.base.width - srcW, sx));
+    sy = Math.max(0, Math.min(this.base.height - srcW, sy));
+    c.clearRect(0, 0, M, M);
+    c.drawImage(this.base, sx, sy, srcW, srcW, 0, 0, M, M);
 
-    // traffic dots
+    const w2m = (x, z) => ({
+      x: ((x + WORLD_HALF) * this.baseScale - sx) / srcW * M,
+      y: ((z + WORLD_HALF) * this.baseScale - sy) / srcW * M,
+    });
+
     c.fillStyle = '#c9c2b4';
     for (const t of traffic.cars) {
-      const p = this.w2m(t.mesh.position.x, t.mesh.position.z);
-      c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+      const p = w2m(t.mesh.position.x, t.mesh.position.z);
+      if (p.x >= 0 && p.x <= M && p.y >= 0 && p.y <= M) c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
     }
-    // player arrow
-    const p = this.w2m(playerPos.x, playerPos.z);
+    c.fillStyle = '#4a7dd8';
+    for (const cop of police.cops) {
+      const p = w2m(cop.mesh.position.x, cop.mesh.position.z);
+      if (p.x >= 0 && p.x <= M && p.y >= 0 && p.y <= M) c.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    const p = w2m(playerPos.x, playerPos.z);
     c.save();
     c.translate(p.x, p.y);
     c.rotate(-playerHeading);
@@ -57,9 +105,20 @@ export class Hud {
       this.toastT -= dt;
       if (this.toastT <= 0) this.toastEl.classList.remove('on');
     }
+    // stars
+    if (police.stars !== this.lastStars) {
+      this.lastStars = police.stars;
+      this.starsEl.textContent = '★'.repeat(police.stars) + '☆'.repeat(3 - police.stars);
+      this.starsEl.classList.toggle('hot', police.stars > 0);
+    }
   }
 
   setSpeed(mph) { this.speedVal.textContent = Math.max(0, Math.round(mph)); }
+  setHealth(h) { this.healthEl.style.width = `${Math.max(0, Math.min(100, h))}%`; }
+  setWeapon(name, show) {
+    this.weaponEl.textContent = name;
+    this.weaponEl.style.display = show ? 'block' : 'none';
+  }
 
   hint(text) {
     if (text) { this.hintEl.textContent = text; this.hintEl.classList.add('on'); }

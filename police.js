@@ -94,7 +94,7 @@ export class Police {
         c.mesh.position.x + c.vel.x * dt, c.mesh.position.z + c.vel.y * dt, 1.9, hit
       );
       if (hit.building || hit.tree || hit.wall) c.vel.multiplyScalar(-0.2);
-      const y = this.world.groundY(solved.x, solved.z);
+      const y = this.world.groundY(solved.x, solved.z, c.mesh.position.y);
       c.mesh.position.set(solved.x, y, solved.z);
       c.mesh.rotation.y = c.heading;
       c.wheelSpin += c.vel.dot(f) * dt * 2.4;

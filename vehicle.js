@@ -192,7 +192,7 @@ export class Car {
     if (hit && (hit.building || hit.wall || hit.tree)) {
       this.vel.multiplyScalar(-0.25);
     }
-    const g = world.groundY;
+    const g = (x, z) => world.groundY(x, z, this.pos.y);
     let gy = g(solved.x, solved.z);
     let y;
     let landed = false;
@@ -216,7 +216,7 @@ export class Car {
     } else if (gy < this.pos.y - 0.5) {
       // ground fell away under us: launch with the vertical rate we had
       this.airborne = true;
-      this.vy = Math.max(0, this.groundRate);
+      this.vy = Math.max(0, this.groundRate) + (this.spec.kind === 'bike' ? 0.9 : 0);
       y = this.pos.y + this.vy * dt;
     } else {
       y = gy;

@@ -4,7 +4,7 @@ import { buildCity } from './city.js';
 import { buildTerrain } from './terrain.js';
 import { buildStunts } from './stunts.js';
 import { makeWorld } from './world.js';
-import { Car } from './vehicle.js';
+import { Car, COP_SPEC } from './vehicle.js';
 import { Player } from './player.js';
 import { Traffic, Peds } from './traffic.js';
 import { Weapons } from './weapons.js';
@@ -12,7 +12,11 @@ import { Police } from './police.js';
 import { Effects, charMesh } from './effects.js';
 import { Hud } from './hud.js';
 import { GameAudio } from './audio.js';
-import { roadCenter } from './config.js';
+import { Animals } from './animals.js';
+import { Pickups } from './pickups.js';
+import { Missions } from './missions.js';
+import { Radio } from './radio.js';
+import { buildConnectorRoads } from './terrain.js';
 
 // ---------- Renderer / scene ----------
 const canvas = document.getElementById('game');
@@ -48,19 +52,28 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- World ----------
-const city = buildCity(scene);
 const terrain = buildTerrain(scene);
 const stunts = buildStunts(scene);
-const world = makeWorld(city, terrain, stunts);
-const traffic = new Traffic(scene);
+const world = makeWorld(terrain, stunts);
+const city = buildCity(scene, world);
+world.attachCity(city);
+buildConnectorRoads(scene, world.groundY);
+const traffic = new Traffic(scene, world);
 const peds = new Peds(scene);
 const police = new Police(scene, world);
 const weapons = new Weapons(scene, world, city);
 const audio = new GameAudio();
 const effects = new Effects(scene, audio);
 const hud = new Hud(city.blocks);
+const animals = new Animals(scene, world);
+const pickups = new Pickups(scene, world);
+const missions = new Missions(scene, world, hud);
+const radio = new Radio();
+missions.bind(peds, traffic);
 
-const player = new Player(scene, roadCenter(6) + 5, roadCenter(6) + 10);
+const player = new Player(scene, 262, 232);
+let cash = 0;
+const unlocked = [true, false, false];
 
 let mode = 'foot';
 let car = null;
@@ -118,7 +131,7 @@ function explodePlayerCar() {
 function splash(pos) {
   peds.scare(pos, 30);
   for (const p of peds.list) {
-    if (p.mode !== 'down' && p.pos.distanceTo(pos) < 8) { peds.knock(p); police.crime(0.5); }
+    if (p.mode !== 'down' && p.pos.distanceTo(pos) < 8) { peds.knock(p); police.crime(0.5); pickups.spawnCash(p.pos, 15 + (Math.random() * 30 | 0)); }
   }
   for (const v of traffic.allVehicles()) {
     if (!v.dead && v.mesh.position.distanceTo(pos) < 8) {
@@ -140,7 +153,22 @@ function splash(pos) {
 // ---------- Enter / exit ----------
 function tryEnterCar() {
   const found = traffic.nearest(player.pos, 3.6);
-  if (!found) return;
+  if (!found) {
+    // jack a police cruiser (bold move)
+    const cop = police.cops.find((c) => c.mesh.position.distanceTo(player.pos) < 3.6 && c.vel.length() < 5);
+    if (cop) {
+      const heading = cop.mesh.rotation.y;
+      const pos = cop.mesh.position.clone();
+      police.removeCop(cop);
+      car = new Car(scene, COP_SPEC, COP_SPEC.colors[0], pos.x, pos.z, heading);
+      car.pos.y = pos.y;
+      player.mesh.visible = false;
+      mode = 'drive';
+      police.crime(0.6);
+      hud.toast('Patrol');
+    }
+    return;
+  }
   const { entry } = found;
   const heading = entry.mesh.rotation.y;
   const pos = entry.mesh.position.clone();
@@ -201,8 +229,8 @@ function respawn(atX, atZ) {
 // ---------- Shooting (on foot AND drive-by) ----------
 function handleWeapons(dt) {
   if (input.justPressed('Digit1')) weapons.switchTo(0);
-  if (input.justPressed('Digit2')) weapons.switchTo(1);
-  if (input.justPressed('Digit3')) weapons.switchTo(2);
+  if (input.justPressed('Digit2') && unlocked[1]) weapons.switchTo(1);
+  if (input.justPressed('Digit3') && unlocked[2]) weapons.switchTo(2);
   const armed = weapons.current > 0;
   player.gun.visible = armed && mode === 'foot';
   hud.setWeapon(weapons.spec.name, true);
@@ -224,6 +252,9 @@ function handleWeapons(dt) {
   for (const v of traffic.allVehicles()) {
     if (!v.dead) targets.push({ pos: v.mesh.position, r: 2.2, yOff: 0.8, ref: { kind: 'car', v } });
   }
+  for (const a of animals.list) {
+    if (a.mode !== 'down') targets.push({ pos: a.pos, r: 0.9 * a.sp.scale, ref: { kind: 'animal', a } });
+  }
 
   const hit = weapons.fire(origin, aimDir(), targets);
   audio.gunshot(weapons.current === 2 ? 0.7 : 1);
@@ -231,13 +262,14 @@ function handleWeapons(dt) {
   peds.scare(mode === 'drive' ? car.pos : player.pos, 26);
   const dmg = weapons.current === 2 ? 9 : 16;
   if (hit) {
-    if (hit.target.kind === 'ped') { peds.knock(hit.target.p); police.crime(0.8); }
+    if (hit.target.kind === 'ped') { peds.knock(hit.target.p); police.crime(0.8); pickups.spawnCash(hit.target.p.pos, 15 + (Math.random() * 30 | 0)); }
     if (hit.target.kind === 'cop') {
       const c = hit.target.c;
       c.hp = (c.hp ?? 100) - dmg * 1.5;
       police.crime(0.5);
       if (c.hp <= 0) { effects.boom(c.mesh.position.clone()); splash(c.mesh.position); police.removeCop(c); police.crime(1.2); }
     }
+    if (hit.target.kind === 'animal') animals.knock(hit.target.a);
     if (hit.target.kind === 'car') {
       const v = hit.target.v;
       v.hp -= dmg;
@@ -287,7 +319,7 @@ function updateCamera(dt) {
 // ---------- Loop ----------
 const clock = new THREE.Clock();
 
-const onPedDown = () => police.crime(0.9);
+const onPedDown = (p) => { police.crime(0.9); pickups.spawnCash(p.pos, 15 + (Math.random() * 30 | 0)); };
 
 function tick() {
   requestAnimationFrame(tick);
@@ -328,11 +360,14 @@ function tick() {
       if (bumped.hp <= 0) { explodeEntry(bumped); police.crime(1.0); }
     }
     if (input.justPressed('KeyH')) { audio.horn(); peds.scare(car.pos, 12); }
+    if (input.justPressed('KeyT') && !missions.active && !car.dead) missions.start(car.spec, car.pos, peds, traffic);
+    if (input.justPressed('KeyR')) hud.toast(radio.cycle());
     if (car.hp <= 0 && !car.dead) explodePlayerCar();
     if (car) {
       const speed = car.vel.length();
       hud.setSpeed(car.speedMph());
-      hud.hint(car.airborne ? '' : speed < 3 ? 'Press E to exit' : '');
+      const offer = !missions.active && missions.offerFor(car.spec);
+      hud.hint(car.airborne ? '' : speed < 3 ? (offer ? `Press E to exit — ${offer}` : 'Press E to exit') : '');
       if (!car.airborne && speed < 3 && input.justPressed('KeyE')) exitCar();
       audio.engine(speed, ax.y, true);
       if (car && car.spec.kind === 'bike') poseRider();
@@ -343,6 +378,24 @@ function tick() {
   handleWeapons(dt);
   weapons.update(dt);
   effects.update(dt);
+  radio.setDriving(mode === 'drive');
+
+  // mission hint when idling in a mission-capable vehicle
+  const aev = animals.update(dt, threatPos, mode === 'foot', mode === 'drive' && car ? car.vel.length() : player.speed);
+  if (aev.bearHit) { health -= 18; shake = Math.min(0.8, shake + 0.45); audio.thud(); }
+
+  for (const got of pickups.update(dt, threatPos)) {
+    if (got.type === 'pistol') { unlocked[1] = true; weapons.switchTo(1); hud.toast('Picked up PISTOL'); }
+    else if (got.type === 'smg') { unlocked[2] = true; weapons.switchTo(2); hud.toast('Picked up SMG'); }
+    else if (got.type === 'health') { health = Math.min(100, health + 50); hud.toast('+50 HEALTH'); }
+    else if (got.type === 'cash') { cash += got.value; }
+    else if (got.type === 'package') { cash += 500; hud.toast(`Hidden package ${pickups.packagesFound()}/25  +$500`); }
+  }
+
+  const mSpeed = mode === 'drive' && car ? car.vel.length() : 0;
+  cash += missions.update(dt, threatPos, mSpeed, mode === 'drive', car ? car.spec : null, car ? car.dead : false);
+  if (!missions.active) hud.setMission(null);
+  hud.setCash(cash);
   peds.update(dt, threatPos, threatSpeed, threatR, world, onPedDown);
   traffic.update(dt, threatPos, threatSpeed);
 
@@ -360,10 +413,10 @@ function tick() {
 
   if (ev.busted) {
     showOverlay('BUSTED');
-    respawn(roadCenter(5) + 6, roadCenter(4) + 8);
+    respawn(190, 78);
   } else if (health <= 0) {
     showOverlay('WASTED');
-    respawn(roadCenter(7) + 6, roadCenter(8) + 8);
+    respawn(334, 294);
   }
   hud.setHealth(health);
 

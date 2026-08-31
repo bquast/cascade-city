@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ROAD_W, BLOCK_W, PITCH, N_BLOCKS, CITY_SIZE, ORIGIN, districtOf } from './config.js';
+import { ROAD_W, BLOCK_W, PITCH, SETTLEMENTS, settlementOrigin, settlementExtent, GOLF } from './config.js';
+import { ribbon } from './terrain.js';
 
-// Deterministic PRNG so every visitor sees the same city.
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -16,12 +16,11 @@ const DOWNTOWN_FACADES = [0x9a8f80, 0x8a7f72, 0x7d7468, 0x6f6a63, 0x94856f, 0x76
 const HOUSE_WALLS = [0xb8a98c, 0xa8938a, 0x9aa48c, 0xb0a498, 0x8f9aa8, 0xc0b096];
 const ROOFS = [0x7a4a3a, 0x5a5f6a, 0x6a5a4a, 0x4a5a4f];
 const CONTAINERS = [0x9a4530, 0x2f6070, 0x707a30, 0x8a8a8a, 0x40507a];
+const BARN = [0x8a3a2a, 0x7a5a3a, 0x6a6a66];
 
-// triangular prism for pitched roofs (unit size, base 1x1, ridge along z)
 function makeRoofGeo() {
   const g = new THREE.BufferGeometry();
   const v = new Float32Array([
-    // two sloped quads + two gable triangles, unit box footprint, apex y=1
     -0.5,0,-0.5,  0,1,-0.5,  0,1,0.5,   -0.5,0,-0.5,  0,1,0.5,  -0.5,0,0.5,
      0.5,0,-0.5,  0.5,0,0.5, 0,1,0.5,    0.5,0,-0.5,  0,1,0.5,   0,1,-0.5,
     -0.5,0,-0.5,  0.5,0,-0.5, 0,1,-0.5,
@@ -32,207 +31,233 @@ function makeRoofGeo() {
   return g;
 }
 
-export function buildCity(scene) {
+export function buildCity(scene, world) {
   const rand = mulberry32(20260831);
-  const colliders = [];
+  const gy = world.groundY;
   const blocks = [];
-  for (let i = 0; i < N_BLOCKS; i++) {
-    colliders.push([]);
-    for (let j = 0; j < N_BLOCKS; j++) colliders[i].push([]);
-  }
-  const addBox = (i, j, x, z, w, dep) =>
-    colliders[i][j].push({ minX: x - 0.4, maxX: x + w + 0.4, minZ: z - 0.4, maxZ: z + dep + 0.4 });
-
-  // ---- City ground (asphalt) — terrain takes over outside ----
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(CITY_SIZE + 30, CITY_SIZE + 30),
-    new THREE.MeshLambertMaterial({ color: 0x3d3b38 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
+  const boxes = [];
+  const roofs = [];
+  const colliders = new Map(); // "sid:i,j" -> AABB list
+  const lots = [];
+  const parkTrees = [];
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const col = new THREE.Color();
-
-  // ---- Sidewalk slabs ----
-  const slabGeo = new THREE.BoxGeometry(BLOCK_W, 0.3, BLOCK_W);
-  const slabMat = new THREE.MeshLambertMaterial({ color: 0x8f8a80 });
-  const slabs = new THREE.InstancedMesh(slabGeo, slabMat, N_BLOCKS * N_BLOCKS);
-  slabs.receiveShadow = true;
-  let s = 0;
-  for (let i = 0; i < N_BLOCKS; i++) {
-    for (let j = 0; j < N_BLOCKS; j++) {
-      m4.makeTranslation(ORIGIN + i * PITCH + ROAD_W + BLOCK_W / 2, 0.15, ORIGIN + j * PITCH + ROAD_W + BLOCK_W / 2);
-      slabs.setMatrixAt(s++, m4);
-    }
-  }
-  scene.add(slabs);
-
-  // ---- Road markings ----
-  const dashGeo = new THREE.PlaneGeometry(0.35, 3);
-  dashGeo.rotateX(-Math.PI / 2);
-  const dashMat = new THREE.MeshBasicMaterial({ color: 0xd8cf9a });
-  const dashesPerRoad = Math.floor(CITY_SIZE / 8);
-  const dashes = new THREE.InstancedMesh(dashGeo, dashMat, (N_BLOCKS + 1) * 2 * dashesPerRoad);
-  let d = 0;
   const up = new THREE.Vector3(0, 1, 0);
-  const one = new THREE.Vector3(1, 1, 1);
-  for (let k = 0; k <= N_BLOCKS; k++) {
-    const c = ORIGIN + k * PITCH + ROAD_W / 2;
-    for (let t = 0; t < dashesPerRoad; t++) {
-      const along = ORIGIN + 4 + t * 8;
-      m4.compose(new THREE.Vector3(c, 0.02, along), q.setFromAxisAngle(up, 0), one);
-      dashes.setMatrixAt(d++, m4);
-      m4.compose(new THREE.Vector3(along, 0.02, c), q.setFromAxisAngle(up, Math.PI / 2), one);
-      dashes.setMatrixAt(d++, m4);
+
+  const key = (s, i, j) => `${s.id}:${i},${j}`;
+  const addCol = (s, i, j, x, z, w, dep) => {
+    const k = key(s, i, j);
+    if (!colliders.has(k)) colliders.set(k, []);
+    colliders.get(k).push({ minX: x - 0.4, maxX: x + w + 0.4, minZ: z - 0.4, maxZ: z + dep + 0.4 });
+  };
+  const addBoxC = (s, i, j, cx, cz, w, h, dep, color, yB) => {
+    boxes.push({ x: cx, z: cz, w, h, dep, color, yBase: yB ?? (gy(cx, cz) - 0.5), hExtra: yB === undefined ? 0.5 : 0 });
+    addCol(s, i, j, cx - w / 2, cz - dep / 2, w, dep);
+  };
+
+  // ---------- per-settlement generation ----------
+  for (const s of SETTLEMENTS) {
+    const o = settlementOrigin(s);
+    const ext = settlementExtent(s);
+
+    // grid road ribbons (skip for rural: it just has its connector street)
+    if (s.type !== 'rural') {
+      for (let k = 0; k <= s.n; k++) {
+        const c = o.x + k * PITCH + ROAD_W / 2;
+        ribbon(scene, gy, c, o.z, c, o.z + ext, 13, 0x45423e, 0.05 + (k % 2) * 0.012);
+        const cz = o.z + k * PITCH + ROAD_W / 2;
+        ribbon(scene, gy, o.x, cz, o.x + ext, cz, 13, 0x45423e, 0.056 + (k % 2) * 0.012);
+      }
     }
-  }
-  dashes.count = d;
-  scene.add(dashes);
 
-  // ---- Collect instances per geometry type ----
-  const boxes = [];   // {x,z,w,h,dep,color} pivot at base corner-free (center given)
-  const roofs = [];   // {x,z,w,h,dep,color,rot}
-  const parkSpots = [];
-  const center = N_BLOCKS / 2 - 0.5;
-  const lots = [];
+    for (let i = 0; i < s.n; i++) {
+      for (let j = 0; j < s.n; j++) {
+        const bx = o.x + i * PITCH + ROAD_W;
+        const bz = o.z + j * PITCH + ROAD_W;
+        const isPark = s.type !== 'rural' && s.type !== 'industrial' && rand() < 0.08;
+        const isCul = !isPark && s.culdesacs && rand() < 0.4;
+        blocks.push({ s, i, j, isPark, district: s.type, isCul });
+        if (isPark) { buildPark(bx, bz); continue; }
 
-  for (let i = 0; i < N_BLOCKS; i++) {
-    for (let j = 0; j < N_BLOCKS; j++) {
-      const bx = ORIGIN + i * PITCH + ROAD_W;
-      const bz = ORIGIN + j * PITCH + ROAD_W;
-      const dist = districtOf(i, j);
-      const isPark = dist === 'residential' && rand() < 0.08;
-      blocks.push({ i, j, isPark, district: dist });
-      if (isPark) { parkSpots.push({ bx, bz }); continue; }
-
-      if (dist === 'downtown') {
-        const lotW = (BLOCK_W - 8) / 2;
-        for (let li = 0; li < 2; li++) for (let lj = 0; lj < 2; lj++) {
-          const w = 12 + rand() * (lotW - 13);
-          const dep = 12 + rand() * (lotW - 13);
-          const distC = Math.hypot(i - center, j - center) / center;
-          const h = 22 + rand() * 20 + Math.max(0, 0.8 - distC) * (70 + rand() * 60);
-          const x = bx + 4 + li * lotW + (lotW - w) / 2;
-          const z = bz + 4 + lj * lotW + (lotW - dep) / 2;
-          boxes.push({ x: x + w / 2, z: z + dep / 2, w, h, dep, color: DOWNTOWN_FACADES[(rand() * DOWNTOWN_FACADES.length) | 0] });
-          if (h > 30 && rand() < 0.75) {
-            boxes.push({ x: x + w / 2 + (rand() - 0.5) * w * 0.3, z: z + dep / 2 + (rand() - 0.5) * dep * 0.3, w: w * 0.35, h: 3 + rand() * 4, dep: dep * 0.35, color: 0x6f6a63, yBase: h });
+        if (s.type === 'downtown') {
+          const lotW = (BLOCK_W - 8) / 2;
+          for (let li = 0; li < 2; li++) for (let lj = 0; lj < 2; lj++) {
+            const w = 12 + rand() * (lotW - 13);
+            const dep = 12 + rand() * (lotW - 13);
+            const distC = Math.hypot(i - (s.n / 2 - 0.5), j - (s.n / 2 - 0.5)) / (s.n / 2);
+            const h = 20 + rand() * 18 + Math.max(0, 0.85 - distC) * (60 + rand() * 55);
+            const cx = bx + 4 + li * lotW + lotW / 2;
+            const cz = bz + 4 + lj * lotW + lotW / 2;
+            addBoxC(s, i, j, cx, cz, w, h, dep, DOWNTOWN_FACADES[(rand() * DOWNTOWN_FACADES.length) | 0]);
+            if (h > 30 && rand() < 0.75) {
+              boxes.push({ x: cx, z: cz, w: w * 0.35, h: 3 + rand() * 4, dep: dep * 0.35, color: 0x6f6a63, yBase: gy(cx, cz) - 0.5 + h + 0.5, hExtra: 0 });
+            }
+            lots.push({ x: cx - w / 2, z: cz - dep / 2, w, dep });
           }
-          addBox(i, j, x, z, w, dep);
-          lots.push({ x, z, w, dep, i, j });
-        }
-      } else if (dist === 'industrial') {
-        // 2 big warehouses + a container yard
-        for (let wgi = 0; wgi < 2; wgi++) {
-          const w = 20 + rand() * 8, dep = 16 + rand() * 6, h = 8 + rand() * 5;
-          const x = bx + 4 + (rand() * (BLOCK_W - 8 - w));
-          const z = bz + 4 + wgi * ((BLOCK_W - 8) / 2) + rand() * 3;
-          boxes.push({ x: x + w / 2, z: z + dep / 2, w, h, dep, color: rand() < 0.5 ? 0x7d7a72 : 0x8a6a55 });
-          roofs.push({ x: x + w / 2, z: z + dep / 2, w: w + 1, h: 2.5, dep: dep + 1, color: 0x5a5f6a, yBase: h, rot: 0 });
-          addBox(i, j, x, z, w, dep);
-          lots.push({ x, z, w, dep, i, j });
-        }
-        const stacks = 2 + (rand() * 4) | 0;
-        for (let ci = 0; ci < stacks; ci++) {
-          const w = 2.5, dep = 6.2, hgt = 2.6;
-          const x = bx + 5 + rand() * (BLOCK_W - 16);
-          const z = bz + 5 + rand() * (BLOCK_W - 16);
-          const tall = rand() < 0.4 ? 2 : 1;
-          for (let lvl = 0; lvl < tall; lvl++) {
-            boxes.push({ x: x + w / 2, z: z + dep / 2, w, h: hgt, dep, color: CONTAINERS[(rand() * CONTAINERS.length) | 0], yBase: lvl * hgt });
+        } else if (s.type === 'industrial') {
+          for (let wgi = 0; wgi < 2; wgi++) {
+            const w = 20 + rand() * 8, dep = 16 + rand() * 6, h = 8 + rand() * 5;
+            const cx = bx + 4 + rand() * (BLOCK_W - 8 - w) + w / 2;
+            const cz = bz + 4 + wgi * ((BLOCK_W - 8) / 2) + dep / 2;
+            addBoxC(s, i, j, cx, cz, w, h, dep, rand() < 0.5 ? 0x7d7a72 : 0x8a6a55);
+            roofs.push({ x: cx, z: cz, w: w + 1, h: 2.5, dep: dep + 1, color: 0x5a5f6a, yBase: gy(cx, cz) + h, rot: 0 });
+            lots.push({ x: cx - w / 2, z: cz - dep / 2, w, dep });
           }
-          addBox(i, j, x, z, w, dep);
-        }
-      } else {
-        // residential: 3x3 small houses with pitched roofs
-        const lotW = (BLOCK_W - 8) / 3;
-        for (let li = 0; li < 3; li++) for (let lj = 0; lj < 3; lj++) {
-          if (rand() < 0.15) continue; // empty yard
-          const w = 7 + rand() * (lotW - 8);
-          const dep = 7 + rand() * (lotW - 8);
-          const h = 3.5 + rand() * 2.5;
-          const x = bx + 4 + li * lotW + (lotW - w) / 2 + (rand() - 0.5) * 1.5;
-          const z = bz + 4 + lj * lotW + (lotW - dep) / 2 + (rand() - 0.5) * 1.5;
-          boxes.push({ x: x + w / 2, z: z + dep / 2, w, h, dep, color: HOUSE_WALLS[(rand() * HOUSE_WALLS.length) | 0] });
-          roofs.push({ x: x + w / 2, z: z + dep / 2, w: w + 0.8, h: 2 + rand(), dep: dep + 0.8, color: ROOFS[(rand() * ROOFS.length) | 0], yBase: h, rot: rand() < 0.5 ? 0 : Math.PI / 2 });
-          addBox(i, j, x, z, w, dep);
-          lots.push({ x, z, w, dep, i, j });
+          const stacks = 2 + (rand() * 4) | 0;
+          for (let ci = 0; ci < stacks; ci++) {
+            const cx = bx + 6 + rand() * (BLOCK_W - 14);
+            const cz = bz + 6 + rand() * (BLOCK_W - 14);
+            const tall = rand() < 0.4 ? 2 : 1;
+            const base = gy(cx, cz) - 0.3;
+            for (let lvl = 0; lvl < tall; lvl++) {
+              boxes.push({ x: cx, z: cz, w: 2.5, h: 2.6, dep: 6.2, color: CONTAINERS[(rand() * CONTAINERS.length) | 0], yBase: base + lvl * 2.6, hExtra: 0.3 });
+            }
+            addCol(s, i, j, cx - 1.25, cz - 3.1, 2.5, 6.2);
+          }
+        } else if (s.type === 'rural') {
+          // barn + shacks, loose layout
+          const bw = 10 + rand() * 3, bd = 8 + rand() * 2, bh = 5 + rand() * 2;
+          const cx = bx + 10 + rand() * (BLOCK_W - 24) + bw / 2;
+          const cz = bz + 10 + rand() * (BLOCK_W - 24) + bd / 2;
+          addBoxC(s, i, j, cx, cz, bw, bh, bd, BARN[0]);
+          roofs.push({ x: cx, z: cz, w: bw + 1.2, h: 3.2, dep: bd + 1.2, color: 0x5a4a3a, yBase: gy(cx, cz) + bh, rot: 0 });
+          for (let sh = 0; sh < 2; sh++) {
+            const w = 4 + rand() * 2.5, dep2 = 4 + rand() * 2;
+            const sx = bx + 4 + rand() * (BLOCK_W - 12) + w / 2;
+            const sz = bz + 4 + rand() * (BLOCK_W - 12) + dep2 / 2;
+            addBoxC(s, i, j, sx, sz, w, 2.6 + rand(), dep2, BARN[1 + ((rand() * 2) | 0)]);
+            roofs.push({ x: sx, z: sz, w: w + 0.6, h: 1.4, dep: dep2 + 0.6, color: ROOFS[(rand() * ROOFS.length) | 0], rot: rand() < 0.5 ? 0 : Math.PI / 2, yBase: gy(sx, sz) + 2.6 });
+          }
+        } else if (isCul) {
+          // cul-de-sac: stub road from south edge to a circle, houses ringing it
+          const ccx = bx + BLOCK_W / 2, ccz = bz + BLOCK_W / 2;
+          ribbon(scene, gy, ccx, bz - 2, ccx, ccz, 9, 0x45423e, 0.08);
+          const pad = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshLambertMaterial({ color: 0x45423e }));
+          pad.rotation.x = -Math.PI / 2;
+          pad.position.set(ccx, gy(ccx, ccz) + 0.09, ccz);
+          pad.receiveShadow = true;
+          scene.add(pad);
+          const nH = 6;
+          for (let hI = 0; hI < nH; hI++) {
+            const ang = (hI / nH) * Math.PI * 2 + 0.4;
+            const hx = ccx + Math.cos(ang) * 18;
+            const hz = ccz + Math.sin(ang) * 18;
+            if (hz < bz + 4 && Math.abs(hx - ccx) < 7) continue; // keep the stub entrance clear
+            const w = 7 + rand() * 3, dep = 7 + rand() * 2, h = 3.5 + rand() * 2;
+            addBoxC(s, i, j, hx, hz, w, h, dep, HOUSE_WALLS[(rand() * HOUSE_WALLS.length) | 0]);
+            roofs.push({ x: hx, z: hz, w: w + 0.8, h: 2 + rand(), dep: dep + 0.8, color: ROOFS[(rand() * ROOFS.length) | 0], yBase: gy(hx, hz) + h, rot: rand() < 0.5 ? 0 : Math.PI / 2 });
+          }
+        } else {
+          // regular residential 3x3
+          const lotW = (BLOCK_W - 8) / 3;
+          for (let li = 0; li < 3; li++) for (let lj = 0; lj < 3; lj++) {
+            if (rand() < 0.15) continue;
+            const w = 7 + rand() * (lotW - 8);
+            const dep = 7 + rand() * (lotW - 8);
+            const h = 3.5 + rand() * 2.5;
+            const cx = bx + 4 + li * lotW + lotW / 2 + (rand() - 0.5) * 1.5;
+            const cz = bz + 4 + lj * lotW + lotW / 2 + (rand() - 0.5) * 1.5;
+            addBoxC(s, i, j, cx, cz, w, h, dep, HOUSE_WALLS[(rand() * HOUSE_WALLS.length) | 0]);
+            roofs.push({ x: cx, z: cz, w: w + 0.8, h: 2 + rand(), dep: dep + 0.8, color: ROOFS[(rand() * ROOFS.length) | 0], yBase: gy(cx, cz) + h, rot: rand() < 0.5 ? 0 : Math.PI / 2 });
+          }
         }
       }
     }
   }
 
-  // ---- Instanced boxes ----
+  function buildPark(bx, bz) {
+    const cx = bx + BLOCK_W / 2, cz = bz + BLOCK_W / 2;
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(BLOCK_W / 2 - 3, 24), new THREE.MeshLambertMaterial({ color: 0x5d7a45 }));
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(cx, gy(cx, cz) + 0.07, cz);
+    scene.add(pad);
+    const n = 6 + (rand() * 5) | 0;
+    for (let t = 0; t < n; t++) parkTrees.push({ x: bx + 8 + rand() * (BLOCK_W - 16), z: bz + 8 + rand() * (BLOCK_W - 16), s: 0.8 + rand() * 0.7 });
+  }
+
+  // ---------- golf course props ----------
+  for (let f = 0; f < 6; f++) {
+    const ang = rand() * Math.PI * 2, r = 30 + rand() * (GOLF.r - 60);
+    const fx = GOLF.x + Math.cos(ang) * r, fz = GOLF.z + Math.sin(ang) * r;
+    const fy = gy(fx, fz);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 5), new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+    pole.position.set(fx, fy + 1.2, fz);
+    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.04), new THREE.MeshBasicMaterial({ color: 0xc23b22 }));
+    flag.position.set(fx + 0.35, fy + 2.1, fz);
+    scene.add(pole, flag);
+  }
+  for (let b = 0; b < 5; b++) {
+    const ang = rand() * Math.PI * 2, r = 40 + rand() * (GOLF.r - 70);
+    const sx = GOLF.x + Math.cos(ang) * r, sz = GOLF.z + Math.sin(ang) * r;
+    const bunker = new THREE.Mesh(new THREE.CircleGeometry(6 + rand() * 4, 18), new THREE.MeshLambertMaterial({ color: 0xc9b98a }));
+    bunker.rotation.x = -Math.PI / 2;
+    bunker.position.set(sx, gy(sx, sz) + 0.06, sz);
+    scene.add(bunker);
+  }
+
+  // ---------- instanced boxes + roofs + park trees ----------
   const bGeo = new THREE.BoxGeometry(1, 1, 1);
   bGeo.translate(0, 0.5, 0);
   const bMesh = new THREE.InstancedMesh(bGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), boxes.length);
   bMesh.castShadow = bMesh.receiveShadow = true;
   boxes.forEach((B, idx) => {
-    m4.compose(new THREE.Vector3(B.x, 0.3 + (B.yBase || 0), B.z), q.identity(), new THREE.Vector3(B.w, B.h, B.dep));
+    m4.compose(new THREE.Vector3(B.x, B.yBase, B.z), q.identity(), new THREE.Vector3(B.w, B.h + (B.hExtra || 0), B.dep));
     bMesh.setMatrixAt(idx, m4);
     bMesh.setColorAt(idx, col.setHex(B.color));
   });
   scene.add(bMesh);
 
-  // ---- Instanced pitched roofs ----
-  if (roofs.length) {
-    const rGeo = makeRoofGeo();
-    const rMesh = new THREE.InstancedMesh(rGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), roofs.length);
-    rMesh.castShadow = true;
-    roofs.forEach((R, idx) => {
-      // when rotated 90°, footprint w/dep swap so the roof still covers the house
-      const sw = R.rot ? R.dep : R.w;
-      const sd = R.rot ? R.w : R.dep;
-      m4.compose(
-        new THREE.Vector3(R.x, 0.3 + R.yBase, R.z),
-        q.setFromAxisAngle(up, R.rot),
-        new THREE.Vector3(sw, R.h, sd)
-      );
-      rMesh.setMatrixAt(idx, m4);
-      rMesh.setColorAt(idx, col.setHex(R.color));
-    });
-    scene.add(rMesh);
-  }
+  const rGeo = makeRoofGeo();
+  const rMesh = new THREE.InstancedMesh(rGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), roofs.length);
+  rMesh.castShadow = true;
+  roofs.forEach((R, idx) => {
+    const sw = R.rot ? R.dep : R.w;
+    const sd = R.rot ? R.w : R.dep;
+    m4.compose(new THREE.Vector3(R.x, R.yBase, R.z), q.setFromAxisAngle(up, R.rot || 0), new THREE.Vector3(sw, R.h, sd));
+    rMesh.setMatrixAt(idx, m4);
+    rMesh.setColorAt(idx, col.setHex(R.color));
+  });
+  scene.add(rMesh);
 
-  // ---- Parks ----
-  if (parkSpots.length) {
-    const gGeo = new THREE.BoxGeometry(BLOCK_W - 6, 0.35, BLOCK_W - 6);
-    const grass = new THREE.InstancedMesh(gGeo, new THREE.MeshLambertMaterial({ color: 0x5d7a45 }), parkSpots.length);
-    const treeSpots = [];
-    parkSpots.forEach((P, gi) => {
-      m4.makeTranslation(P.bx + BLOCK_W / 2, 0.18, P.bz + BLOCK_W / 2);
-      grass.setMatrixAt(gi, m4);
-      const n = 6 + (rand() * 5) | 0;
-      for (let t = 0; t < n; t++) treeSpots.push({ x: P.bx + 6 + rand() * (BLOCK_W - 12), z: P.bz + 6 + rand() * (BLOCK_W - 12), s: 0.8 + rand() * 0.7 });
-    });
-    scene.add(grass);
+  if (parkTrees.length) {
     const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 2.4, 5);
     trunkGeo.translate(0, 1.2, 0);
     const crownGeo = new THREE.ConeGeometry(2.2, 5, 6);
     crownGeo.translate(0, 4.6, 0);
-    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x6b4f35 }), treeSpots.length);
-    const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0x4a6b3a }), treeSpots.length);
+    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x6b4f35 }), parkTrees.length);
+    const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0x4a6b3a }), parkTrees.length);
     crowns.castShadow = true;
-    treeSpots.forEach((t, idx) => {
-      m4.compose(new THREE.Vector3(t.x, 0.3, t.z), q.identity(), new THREE.Vector3(t.s, t.s, t.s));
+    parkTrees.forEach((t, idx) => {
+      m4.compose(new THREE.Vector3(t.x, gy(t.x, t.z), t.z), q.identity(), new THREE.Vector3(t.s, t.s, t.s));
       trunks.setMatrixAt(idx, m4);
       crowns.setMatrixAt(idx, m4);
     });
     scene.add(trunks, crowns);
   }
 
-  // ---- Collision: circle vs building AABBs (bounds handled by world.js) ----
+  // ---------- collision + bullet occlusion ----------
+  function locate(x, z) {
+    for (const s of SETTLEMENTS) {
+      const o = settlementOrigin(s), e = settlementExtent(s);
+      if (x >= o.x - PITCH && x <= o.x + e + PITCH && z >= o.z - PITCH && z <= o.z + e + PITCH) {
+        return { s, o };
+      }
+    }
+    return null;
+  }
+
   function resolve(x, z, r, hit) {
     let nx = x, nz = z;
-    const gi = Math.floor((nx - ORIGIN) / PITCH);
-    const gj = Math.floor((nz - ORIGIN) / PITCH);
+    const loc = locate(nx, nz);
+    if (!loc) return { x: nx, z: nz };
+    const gi = Math.floor((nx - loc.o.x) / PITCH);
+    const gj = Math.floor((nz - loc.o.z) / PITCH);
     for (let ii = gi - 1; ii <= gi + 1; ii++) {
       for (let jj = gj - 1; jj <= gj + 1; jj++) {
-        if (ii < 0 || jj < 0 || ii >= N_BLOCKS || jj >= N_BLOCKS) continue;
-        for (const box of colliders[ii][jj]) {
+        const arr = colliders.get(key(loc.s, ii, jj));
+        if (!arr) continue;
+        for (const box of arr) {
           const cx = Math.max(box.minX, Math.min(nx, box.maxX));
           const cz = Math.max(box.minZ, Math.min(nz, box.maxZ));
           let dx = nx - cx, dz = nz - cz;
@@ -259,13 +284,14 @@ export function buildCity(scene) {
     return { x: nx, z: nz };
   }
 
-  // ray vs building AABBs / rough occlusion for bullets (2D footprint + height)
-  const allBoxes = boxes; // has yBase/h
   function blockedAt(x, y, z) {
-    const gi = Math.floor((x - ORIGIN) / PITCH);
-    const gj = Math.floor((z - ORIGIN) / PITCH);
-    if (gi < 0 || gj < 0 || gi >= N_BLOCKS || gj >= N_BLOCKS) return false;
-    for (const box of colliders[gi][gj]) {
+    const loc = locate(x, z);
+    if (!loc) return false;
+    const gi = Math.floor((x - loc.o.x) / PITCH);
+    const gj = Math.floor((z - loc.o.z) / PITCH);
+    const arr = colliders.get(key(loc.s, gi, gj));
+    if (!arr) return false;
+    for (const box of arr) {
       if (x > box.minX && x < box.maxX && z > box.minZ && z < box.maxZ) return true;
     }
     return false;

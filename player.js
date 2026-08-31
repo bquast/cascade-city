@@ -88,7 +88,7 @@ export class Player {
     const vx = -Math.sin(this.heading) * this.speed;
     const vz = -Math.cos(this.heading) * this.speed;
     const solved = world.resolve(this.pos.x + vx * dt, this.pos.z + vz * dt, this.radius, null);
-    this.pos.set(solved.x, world.groundY(solved.x, solved.z) + 0.3, solved.z);
+    this.pos.set(solved.x, world.groundY(solved.x, solved.z, this.pos.y) + 0.3, solved.z);
     this.mesh.rotation.y = this.heading;
 
     // walk cycle

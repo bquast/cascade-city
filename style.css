@@ -122,3 +122,17 @@ html, body { height: 100%; overflow: hidden; background: var(--ink); }
   opacity: 0; transition: opacity .5s;
 }
 #overlay.on { opacity: 1; }
+
+#cash {
+  position: absolute; top: 14px; right: 18px;
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 30px; color: #7ec97e;
+  text-shadow: 2px 2px 0 #142014;
+  letter-spacing: 1px;
+}
+#mission {
+  position: absolute; top: 50px; right: 18px;
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 22px; color: #f2a33c;
+  text-shadow: 2px 2px 0 #201a08;
+}

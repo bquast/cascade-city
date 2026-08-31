@@ -18,8 +18,16 @@ export function districtOf(i, j) {
   return 'residential';
 }
 
-export const TRAFFIC_CARS = 24;
-export const PARKED_CARS = 30;
-export const PEDS = 70;
+export const TRAFFIC_CARS = 36;
+export const PARKED_CARS = 42;
+export const PEDS = 120;
 
 export const LAKE = { x: -780, z: 340, r: 130 };
+
+// Stunt ramps: axis-aligned wedges out in the countryside (clear of city traffic).
+// dir = direction you drive to go UP the ramp. u runs 0..L along dir, height 0..H.
+export const RAMPS = [
+  { x: 0,    z: -560, dir: '-z', L: 15, W: 9, H: 4.5 },  // country road north
+  { x: 560,  z: 0,    dir: '+x', L: 15, W: 9, H: 4.5 },  // country road east
+  { x: -612, z: 340,  dir: '-x', L: 17, W: 10, H: 5.5 }, // lake jump
+];

@@ -28,7 +28,7 @@ export class Traffic {
     const k = 1 + ((rand() * (N_BLOCKS - 1)) | 0);
     const dir = rand() < 0.5 ? 1 : -1;
     const along = ORIGIN + 10 + rand() * (CITY_SIZE - 20);
-    const car = { spec, color, axis, k, dir, along, speed: 0, mesh: makeCarMesh(spec, color), stun: 0, wheelSpin: 0 };
+    const car = { spec, color, axis, k, dir, along, speed: 0, mesh: makeCarMesh(spec, color), stun: 0, wheelSpin: 0, hp: 100, dead: false };
     this.placeMover(car);
     car.mesh.rotation.y = headingFor(axis, dir);
     this.scene.add(car.mesh);
@@ -56,12 +56,13 @@ export class Traffic {
       else mesh.position.set(along, 0, cross);
       mesh.rotation.y = heading;
       this.scene.add(mesh);
-      this.parked.push({ spec, color, mesh, heading });
+      this.parked.push({ spec, color, mesh, heading, hp: 100, dead: false });
     }
   }
 
   update(dt, playerPos, playerSpeed) {
     for (const c of this.cars) {
+      if (c.dead) continue;
       if (c.stun > 0) { c.stun -= dt; continue; }
       // brake if something ahead
       const fwd = new THREE.Vector2(-Math.sin(c.mesh.rotation.y), -Math.cos(c.mesh.rotation.y));
@@ -116,6 +117,7 @@ export class Traffic {
     let best = null, bd = range;
     for (const list of [this.cars, this.parked]) {
       for (const c of list) {
+        if (c.dead) continue;
         const d = c.mesh.position.distanceTo(pos);
         if (d < bd) { bd = d; best = { entry: c, list }; }
       }
@@ -130,17 +132,21 @@ export class Traffic {
   }
 
   // player car bumped an AI car?
-  collideWithPlayer(carPos, carVel) {
+  collideWithPlayer(carPos, impactSpeed) {
     for (const c of this.cars) {
+      if (c.dead) continue;
       const d = c.mesh.position.distanceTo(carPos);
       if (d < 3.4) {
         c.stun = 2.5;
         c.speed = 0;
-        return true;
+        if (impactSpeed > 14) c.hp -= (impactSpeed - 12) * 1.5;
+        return c;
       }
     }
-    return false;
+    return null;
   }
+
+  allVehicles() { return [...this.cars, ...this.parked]; }
 }
 
 // ---------- Pedestrians ----------

@@ -112,3 +112,30 @@ GameAudio.prototype.siren = function (dt, on, dist) {
   this.sirGain.gain.setTargetAtTime(vol, t, 0.2);
   this.sirOsc.frequency.setTargetAtTime((this.sirT % 1.2) < 0.6 ? 720 : 960, t, 0.03);
 };
+
+GameAudio.prototype.boom = function () {
+  if (!this.ready) return;
+  this.initExtras();
+  const ctx = this.ctx, t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = this.noiseBuf;
+  src.playbackRate.value = 0.35;
+  const f = ctx.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(900, t);
+  f.frequency.exponentialRampToValueAtTime(90, t + 0.7);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+  src.connect(f).connect(g).connect(ctx.destination);
+  src.start(t);
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(90, t);
+  o.frequency.exponentialRampToValueAtTime(28, t + 0.5);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.5, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  o.connect(og).connect(ctx.destination);
+  o.start(t); o.stop(t + 0.7);
+};

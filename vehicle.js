@@ -6,6 +6,7 @@ export const CATALOG = [
   { name: 'Cabbie',   kind: 'taxi',  accel: 24, top: 32, turn: 2.4, colors: [0xd9a520] },
   { name: 'Mule Van', kind: 'van',   accel: 18, top: 27, turn: 1.9, colors: [0x7d7a72, 0x5b6b70, 0x8a6a4f] },
   { name: 'Vesper',   kind: 'sport', accel: 38, top: 46, turn: 2.7, colors: [0xc23b22, 0x1f6f8b, 0xd8d8d8] },
+  { name: 'Wasp',     kind: 'bike',  accel: 36, top: 44, turn: 3.3, colors: [0xb03030, 0x2a2a2a, 0x2f6070] },
 ];
 
 export const COP_SPEC = { name: 'Patrol', kind: 'sedan', accel: 30, top: 38, turn: 2.5, colors: [0xe8e8e8], cop: true };
@@ -20,7 +21,41 @@ function box(w, h, d, colorHex, mat) {
   return m;
 }
 
+export function makeBikeMesh(colorHex) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x222226 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.3, 1.5), bodyMat);
+  frame.position.y = 0.72; frame.castShadow = true;
+  const tank = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, 0.6), bodyMat);
+  tank.position.set(0, 0.94, -0.25); tank.castShadow = true;
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.55), dark);
+  seat.position.set(0, 0.94, 0.42);
+  const bars = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.07, 0.07), dark);
+  bars.position.set(0, 1.12, -0.72);
+  g.add(frame, tank, seat, bars);
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.08), new THREE.MeshBasicMaterial({ color: 0xfff2c4 }));
+  hl.position.set(0, 0.95, -1.15);
+  g.add(hl);
+  const wheels = [];
+  for (const [z, front] of [[-0.95, true], [0.95, false]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(0, 0.42, z);
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.scale.set(0.55, 1.05, 1.05);
+    w.castShadow = true;
+    pivot.add(w);
+    g.add(pivot);
+    wheels.push({ pivot, wheel: w, front });
+  }
+  g.userData.brakeMat = new THREE.MeshBasicMaterial({ color: 0x3a0d0d });
+  g.userData.wheels = wheels;
+  g.userData.halfL = 1.2;
+  return g;
+}
+
 export function makeCarMesh(spec, colorHex) {
+  if (spec.kind === 'bike') return makeBikeMesh(colorHex);
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
   const glassMat = new THREE.MeshLambertMaterial({ color: 0x22303a });
@@ -103,7 +138,12 @@ export class Car {
     scene.add(this.mesh);
     this.heading = heading;
     this.vel = new THREE.Vector2(0, 0); // x,z world velocity
-    this.radius = 1.9;
+    this.radius = spec.kind === 'bike' ? 0.8 : 1.9;
+    this.hp = 100;
+    this.dead = false;
+    this.vy = 0;
+    this.airborne = false;
+    this.groundRate = 0;
     this.wheelSpin = 0;
     this.steerVis = 0;
   }
@@ -147,26 +187,61 @@ export class Car {
     this.vel.copy(f.multiplyScalar(vA).add(lat));
 
     // integrate + collide
-    const nx = this.pos.x + this.vel.x * dt;
-    const nz = this.pos.z + this.vel.y * dt;
-    const solved = world.resolve(nx, nz, this.radius, hit);
+    const px = this.pos.x, pz = this.pos.z;
+    const nx = px + this.vel.x * dt;
+    const nz = pz + this.vel.y * dt;
+    let solved = world.resolve(nx, nz, this.radius, hit);
     if (hit && (hit.building || hit.wall || hit.tree)) {
       this.vel.multiplyScalar(-0.25);
     }
-    // terrain: height, slope gravity, and body tilt
     const g = world.groundY;
-    const y = g(solved.x, solved.z);
+    let gy = g(solved.x, solved.z);
+    let y;
+    let landed = false;
+    if (this.airborne) {
+      this.vy -= 24 * dt;
+      y = this.pos.y + this.vy * dt;
+      if (y <= gy) {
+        y = gy;
+        landed = this.vy < -8;
+        this.airborne = false;
+        this.vy = 0;
+        this.groundRate = 0;
+      }
+    } else if (gy > this.pos.y + 1.2) {
+      // drove into a vertical face (ramp back, cliff): treat as a wall
+      this.vel.multiplyScalar(-0.25);
+      if (hit) hit.building = true;
+      solved = { x: px, z: pz };
+      gy = g(px, pz);
+      y = Math.min(this.pos.y, gy);
+    } else if (gy < this.pos.y - 0.5) {
+      // ground fell away under us: launch with the vertical rate we had
+      this.airborne = true;
+      this.vy = Math.max(0, this.groundRate);
+      y = this.pos.y + this.vy * dt;
+    } else {
+      y = gy;
+      this.groundRate = (y - this.pos.y) / dt;
+    }
+    if (landed && hit) hit.landed = true;
+
+    // slope forces + body tilt (only meaningful on the ground)
     const gx = (g(solved.x + 2, solved.z) - g(solved.x - 2, solved.z)) / 4;
     const gz = (g(solved.x, solved.z + 2) - g(solved.x, solved.z - 2)) / 4;
-    this.vel.x -= gx * 22 * dt;      // roll downhill
-    this.vel.y -= gz * 22 * dt;
+    if (!this.airborne) {
+      this.vel.x -= gx * 22 * dt;
+      this.vel.y -= gz * 22 * dt;
+    }
     this.pos.set(solved.x, y, solved.z);
     const f2 = this.forward();
-    const slopeF = gx * f2.x + gz * f2.y;            // slope along facing
-    const slopeR = gx * -f2.y + gz * f2.x;           // slope to the right
+    const spd2 = Math.abs(vA);
+    const slopeF = this.airborne ? this.vy / Math.max(9, spd2) : gx * f2.x + gz * f2.y;
+    let rollT = this.airborne ? 0 : Math.atan(gx * -f2.y + gz * f2.x);
+    if (this.spec.kind === 'bike') rollT += -this.steerVis * Math.min(1, spd2 / 10) * 1.9; // lean into turns
     this.mesh.rotation.y = this.heading;
-    this.mesh.rotation.x += (Math.max(-0.45, Math.min(0.45, Math.atan(slopeF))) - this.mesh.rotation.x) * Math.min(1, dt * 8);
-    this.mesh.rotation.z += (Math.max(-0.45, Math.min(0.45, Math.atan(slopeR))) - this.mesh.rotation.z) * Math.min(1, dt * 8);
+    this.mesh.rotation.x += (Math.max(-0.5, Math.min(0.5, Math.atan(slopeF))) - this.mesh.rotation.x) * Math.min(1, dt * 8);
+    this.mesh.rotation.z += (Math.max(-0.8, Math.min(0.8, rollT)) - this.mesh.rotation.z) * Math.min(1, dt * 8);
 
     // wheel visuals
     this.wheelSpin += vA * dt * 2.4;

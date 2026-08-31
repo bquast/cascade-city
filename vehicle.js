@@ -43,7 +43,6 @@ export function makeBikeMesh(colorHex) {
     pivot.position.set(0, 0.42, z);
     const w = new THREE.Mesh(wheelGeo, wheelMat);
     w.scale.set(0.55, 1.05, 1.05);
-    w.castShadow = true;
     pivot.add(w);
     g.add(pivot);
     wheels.push({ pivot, wheel: w, front });
@@ -114,7 +113,6 @@ export function makeCarMesh(spec, colorHex) {
     const pivot = new THREE.Group();
     pivot.position.set(sx * wx, 0.42, sz * wz);
     const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.castShadow = true;
     pivot.add(w);
     g.add(pivot);
     wheels.push({ pivot, wheel: w, front });

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { N_BLOCKS, PITCH, ROAD_W, BLOCK_W, ORIGIN, CITY_SIZE, LANE_OFF, roadCenter, TRAFFIC_CARS, PARKED_CARS, PEDS } from './config.js';
 import { CATALOG, makeCarMesh } from './vehicle.js';
-import { makePedMesh } from './player.js';
 
 const rand = Math.random;
 const pick = (arr) => arr[(rand() * arr.length) | 0];
@@ -168,22 +167,57 @@ function pointOnPerimeter(P, p) {
   return { x: P.x0, z: P.z0 + P.w - p, h: 0 };
 }
 
-const SHIRTS = [0x35597a, 0x7a3548, 0x4a6b3a, 0x8a7030, 0x555f6b, 0x6b4a7a];
-const PANTS = [0x3a3a44, 0x4c443c, 0x2e3a4a];
+const SHIRTS = [0x35597a, 0x7a3548, 0x4a6b3a, 0x8a7030, 0x555f6b, 0x6b4a7a, 0x9a6a3a, 0x3a7a72];
+const PANTS = [0x3a3a44, 0x4c443c, 0x2e3a4a, 0x5a4a3a];
+const SKINS = [0xc9a184, 0xa8825f, 0x8a6a4e, 0x6e4a34, 0xd9b49a];
+
+// Instanced crowd: every pedestrian body part shares one InstancedMesh,
+// so the whole crowd costs 6 draw calls regardless of PEDS.
+const _M = new THREE.Matrix4();
+const _L = new THREE.Matrix4();
+const _P = new THREE.Matrix4();
+const _E = new THREE.Euler(0, 0, 0, 'YXZ');
+const _Q = new THREE.Quaternion();
+const _V1 = new THREE.Vector3();
+const _ONE = new THREE.Vector3(1, 1, 1);
 
 export class Peds {
   constructor(scene) {
-    this.scene = scene;
+    const mk = (geo) => {
+      const m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), PEDS);
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.frustumCulled = false;
+      scene.add(m);
+      return m;
+    };
+    const geoT = new THREE.BoxGeometry(0.62, 0.72, 0.34);
+    const geoH = new THREE.BoxGeometry(0.34, 0.36, 0.34);
+    const geoLeg = new THREE.BoxGeometry(0.22, 0.76, 0.24); geoLeg.translate(0, -0.38, 0);
+    const geoArm = new THREE.BoxGeometry(0.16, 0.64, 0.2); geoArm.translate(0, -0.28, 0);
+    this.torso = mk(geoT); this.head = mk(geoH);
+    this.legL = mk(geoLeg); this.legR = mk(geoLeg);
+    this.armL = mk(geoArm); this.armR = mk(geoArm);
+    this.torso.castShadow = true;
+
     this.list = [];
+    const col = new THREE.Color();
     for (let n = 0; n < PEDS; n++) {
       const i = (rand() * N_BLOCKS) | 0;
       const j = (rand() * N_BLOCKS) | 0;
-      const mesh = makePedMesh(pick(SHIRTS), pick(PANTS));
-      scene.add(mesh);
+      const shirt = pick(SHIRTS), pants = pick(PANTS), skin = pick(SKINS);
+      this.torso.setColorAt(n, col.setHex(shirt));
+      this.armL.setColorAt(n, col.setHex(shirt));
+      this.armR.setColorAt(n, col.setHex(shirt));
+      this.legL.setColorAt(n, col.setHex(pants));
+      this.legR.setColorAt(n, col.setHex(pants));
+      this.head.setColorAt(n, col.setHex(skin));
       this.list.push({
-        mesh, i, j, p: rand() * blockPerimeter(i, j).perim,
+        idx: n,
+        pos: new THREE.Vector3(0, 0.3, 0),
+        heading: 0,
+        i, j, p: rand() * blockPerimeter(i, j).perim,
         dir: rand() < 0.5 ? 1 : -1, mode: 'walk', t: 0, phase: rand() * 6,
-        fleeX: 0, fleeZ: 0,
+        swing: 0, fleeX: 0, fleeZ: 0,
       });
     }
   }
@@ -191,19 +225,19 @@ export class Peds {
   scare(pos, radius) {
     for (const p of this.list) {
       if (p.mode === 'down') continue;
-      if (p.mesh.position.distanceTo(pos) < radius) this.startFlee(p, pos);
+      if (p.pos.distanceTo(pos) < radius) this.startFlee(p, pos);
     }
   }
 
   knock(p) {
-    p.mode = 'down'; p.t = 6;
-    p.mesh.rotation.x = -Math.PI / 2;
-    p.mesh.position.y += 0.2;
+    if (p.mode === 'down') return;
+    p.mode = 'down';
+    p.t = 7;
   }
 
   startFlee(p, from) {
-    const dx = p.mesh.position.x - from.x;
-    const dz = p.mesh.position.z - from.z;
+    const dx = p.pos.x - from.x;
+    const dz = p.pos.z - from.z;
     const d = Math.hypot(dx, dz) || 1;
     p.mode = 'flee'; p.t = 2.2 + rand();
     p.fleeX = dx / d; p.fleeZ = dz / d;
@@ -211,20 +245,17 @@ export class Peds {
 
   update(dt, threatPos, threatSpeed, threatRadius, world, onDown) {
     for (const p of this.list) {
-      const M = p.mesh;
       if (p.mode === 'down') {
         p.t -= dt;
-        if (p.t <= 0) { // respawn elsewhere
+        if (p.t <= 0) {
           p.mode = 'walk';
           p.i = (rand() * N_BLOCKS) | 0; p.j = (rand() * N_BLOCKS) | 0;
           p.p = rand() * blockPerimeter(p.i, p.j).perim;
-          M.rotation.x = 0; M.position.y = 0.3;
         }
         continue;
       }
 
-      const distT = M.position.distanceTo(threatPos);
-      // knocked down by a fast vehicle
+      const distT = p.pos.distanceTo(threatPos);
       if (threatSpeed > 5 && distT < threatRadius + 0.5) {
         this.knock(p);
         if (onDown) onDown(p);
@@ -234,21 +265,20 @@ export class Peds {
 
       if (p.mode === 'flee') {
         p.t -= dt;
-        const solved = world.resolve(M.position.x + p.fleeX * 7 * dt, M.position.z + p.fleeZ * 7 * dt, 0.4, null);
-        M.position.set(solved.x, world.groundY(solved.x, solved.z) + 0.3, solved.z);
-        M.rotation.y = Math.atan2(-p.fleeX, -p.fleeZ);
+        const solved = world.resolve(p.pos.x + p.fleeX * 7 * dt, p.pos.z + p.fleeZ * 7 * dt, 0.4, null);
+        p.pos.set(solved.x, world.groundY(solved.x, solved.z) + 0.3, solved.z);
+        p.heading = Math.atan2(-p.fleeX, -p.fleeZ);
         p.phase += dt * 16;
+        p.swing = Math.sin(p.phase) * 0.8;
         if (p.t <= 0) {
           p.mode = 'walk';
-          // snap back onto nearest block perimeter
-          p.i = Math.max(0, Math.min(N_BLOCKS - 1, Math.floor((M.position.x - ORIGIN) / PITCH)));
-          p.j = Math.max(0, Math.min(N_BLOCKS - 1, Math.floor((M.position.z - ORIGIN) / PITCH)));
+          p.i = Math.max(0, Math.min(N_BLOCKS - 1, Math.floor((p.pos.x - ORIGIN) / PITCH)));
+          p.j = Math.max(0, Math.min(N_BLOCKS - 1, Math.floor((p.pos.z - ORIGIN) / PITCH)));
           const P = blockPerimeter(p.i, p.j);
-          // crude nearest-param: sample
           let bp = 0, bd = 1e9;
           for (let sp = 0; sp < P.perim; sp += 4) {
             const pt = pointOnPerimeter(P, sp);
-            const d = Math.hypot(pt.x - M.position.x, pt.z - M.position.z);
+            const d = Math.hypot(pt.x - p.pos.x, pt.z - p.pos.z);
             if (d < bd) { bd = d; bp = sp; }
           }
           p.p = bp;
@@ -258,18 +288,41 @@ export class Peds {
         if (rand() < 0.001) p.dir *= -1;
         const P = blockPerimeter(p.i, p.j);
         const pt = pointOnPerimeter(P, p.p);
-        M.position.set(pt.x, 0.3, pt.z);
-        M.rotation.y = pt.h + (p.dir < 0 ? Math.PI : 0);
+        p.pos.set(pt.x, 0.3, pt.z);
+        p.heading = pt.h + (p.dir < 0 ? Math.PI : 0);
         p.phase += dt * 7;
+        p.swing = Math.sin(p.phase) * 0.45;
       }
-
-      // walk cycle
-      const amp = p.mode === 'flee' ? 0.8 : 0.45;
-      const s = Math.sin(p.phase) * amp;
-      M.userData.legs[0].rotation.x = s;
-      M.userData.legs[1].rotation.x = -s;
-      M.userData.arms[0].rotation.x = -s * 0.8;
-      M.userData.arms[1].rotation.x = s * 0.8;
     }
+    this.writeInstances();
+  }
+
+  writeInstances() {
+    for (const p of this.list) {
+      const down = p.mode === 'down';
+      _E.set(down ? -Math.PI / 2 : 0, p.heading, 0);
+      _Q.setFromEuler(_E);
+      _V1.copy(p.pos);
+      if (down) _V1.y = p.pos.y + 0.2;
+      _M.compose(_V1, _Q, _ONE);
+      const s = down ? 0 : p.swing;
+      this.part(this.torso, p.idx, 0, 1.12, 0, 0);
+      this.part(this.head, p.idx, 0, 1.72, 0, 0);
+      this.part(this.legL, p.idx, -0.16, 0.76, 0, s);
+      this.part(this.legR, p.idx, 0.16, 0.76, 0, -s);
+      this.part(this.armL, p.idx, -0.42, 1.44, 0, -s * 0.8);
+      this.part(this.armR, p.idx, 0.42, 1.44, 0, s * 0.8);
+    }
+    for (const m of [this.torso, this.head, this.legL, this.legR, this.armL, this.armR]) {
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+  }
+
+  part(mesh, idx, ox, oy, oz, swing) {
+    _L.makeRotationX(swing);
+    _L.setPosition(ox, oy, oz);
+    _P.multiplyMatrices(_M, _L);
+    mesh.setMatrixAt(idx, _P);
   }
 }

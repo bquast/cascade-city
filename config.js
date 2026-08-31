@@ -18,9 +18,9 @@ export function districtOf(i, j) {
   return 'residential';
 }
 
-export const TRAFFIC_CARS = 36;
-export const PARKED_CARS = 42;
-export const PEDS = 120;
+export const TRAFFIC_CARS = 56;
+export const PARKED_CARS = 64;
+export const PEDS = 240;
 
 export const LAKE = { x: -780, z: 340, r: 130 };
 

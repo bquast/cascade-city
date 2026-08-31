@@ -1,6 +1,6 @@
 # Cascade City
 
-A GTA3-flavoured open world in vanilla three.js. A 12x12-block city with districts (downtown towers, residential streets with pitched roofs, an industrial container yard) sits in a 2.4 km procedural countryside: rolling hills, pine and broadleaf forests, a lake, and country roads to the horizon. Walk, jack cars (or the Wasp motorcycle), shoot — on foot or drive-by — blow things up, hit the stunt ramps, earn wanted stars, and try to lose the cops in the hills. No frameworks, no build step, no CDN — everything, including the vendored three.js, sits flat in the project root.
+A GTA3-flavoured open world (240 pedestrians, 120 vehicles) in vanilla three.js. A 12x12-block city with districts (downtown towers, residential streets with pitched roofs, an industrial container yard) sits in a 2.4 km procedural countryside: rolling hills, pine and broadleaf forests, a lake, and country roads to the horizon. Walk, jack cars (or the Wasp motorcycle), shoot — on foot or drive-by — blow things up, hit the stunt ramps, earn wanted stars, and try to lose the cops in the hills. No frameworks, no build step, no CDN — everything, including the vendored three.js, sits flat in the project root.
 
 ## Deploy to Cloudflare Pages
 

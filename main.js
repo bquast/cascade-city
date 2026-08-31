@@ -118,7 +118,7 @@ function explodePlayerCar() {
 function splash(pos) {
   peds.scare(pos, 30);
   for (const p of peds.list) {
-    if (p.mode !== 'down' && p.mesh.position.distanceTo(pos) < 8) { peds.knock(p); police.crime(0.5); }
+    if (p.mode !== 'down' && p.pos.distanceTo(pos) < 8) { peds.knock(p); police.crime(0.5); }
   }
   for (const v of traffic.allVehicles()) {
     if (!v.dead && v.mesh.position.distanceTo(pos) < 8) {
@@ -218,7 +218,7 @@ function handleWeapons(dt) {
 
   const targets = [];
   for (const p of peds.list) {
-    if (p.mode !== 'down') targets.push({ pos: p.mesh.position, r: 0.9, ref: { kind: 'ped', p } });
+    if (p.mode !== 'down') targets.push({ pos: p.pos, r: 0.9, ref: { kind: 'ped', p } });
   }
   for (const c of police.cops) targets.push({ pos: c.mesh.position, r: 2.0, yOff: 0.8, ref: { kind: 'cop', c } });
   for (const v of traffic.allVehicles()) {

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cascade City</title>
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">
+{ "imports": { "three": "./js/lib/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="speed"><span id="speed-val">0</span><span class="unit">mph</span></div>
+  <div id="hint"></div>
+  <div id="toast"></div>
+</div>
+
+<div id="start">
+  <div class="panel">
+    <h1>Cascade City</h1>
+    <p class="tag">A very small open world. One driver. Questionable morals optional.</p>
+    <ul class="controls">
+      <li><b>W A S D</b> walk / drive</li>
+      <li><b>Shift</b> sprint</li>
+      <li><b>E</b> enter / exit vehicle</li>
+      <li><b>Space</b> handbrake</li>
+      <li><b>H</b> horn</li>
+    </ul>
+    <button id="play">Start</button>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

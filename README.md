@@ -1,29 +1,33 @@
-# Cascade City v5 — "The Amalgamation"
+# Cascade City v6 — "Two Point Oh" (the GTA V round)
 
-A GTA-flavoured open world in vanilla three.js. No build step, no CDN, ~220 KB zipped.
+4 km x 4 km. City on the south coast, wilderness rising north to a 150 m mountain,
+desert in the northeast. Vanilla three.js, no build step, no assets.
 
-## New this round
-- **San Andreas-style world**: four settlements — Cascade City (downtown, rolling grades),
-  Palm Flats (residential + cul-de-sacs), Dockside (industrial), Hickory Corner (redneck
-  hamlet) — plus a golf course, linked by country roads.
-- **Drivable open channel**: an LA-river concrete drain runs 2.1 km through the map.
-  Drive down in at either end and follow it under the bridge and the overpass.
-- **Overpass** with layered physics: real over/under — the golf road passes beneath it.
-- **Wildlife**: dogs, coyotes, stags — and bears that will chase you on foot.
-- **Missions (T in vehicle)**: taxi fares (Cabbie), vigilante (Patrol — yes, you can jack
-  a stopped cop car), deliveries (Mule Van).
-- **Radio (R while driving)**: three synthesized stations — lofi, synthwave, country.
-- **Pickups & money**: weapons now start locked — find pistol/SMG spawns. Health packs,
-  cash drops from peds, and 25 hidden packages ($500 each).
-- Motorcycles get extra pop off crests — jump the hills.
+## GTA V features
+- **Three protagonists** — press Q to switch: MARCUS (downtown), FELIX (Palm Flats),
+  BUCK (the Dusty Palms trailer park). Camera flies between them; each keeps their
+  own position, health, and vehicle. Cash and weapons are shared.
+- **Day/night cycle** (8 min/day): moving sun, dusk skies, stars, street lamps that
+  come on at night, glowing AI headlights, and a spotlight headlight on your car.
+- **5-star wanted level** — at 4 stars, police HELICOPTERS join with searchlights.
+  You can still jack a stopped cruiser for vigilante work.
+- **The map**: ocean + beach boulevard with palms, a drivable pier with a pavilion,
+  Port Cascade with gantry cranes, the CASCADE sign on the foothill, a wind farm
+  with spinning turbines, vineyards, a desert full of saguaros, Mount Cascade with
+  a switchback road — and a stunt ramp at the summit pointing off the cliff.
+- The concrete channel now empties into the sea. New rides: the Brawler muscle car
+  and the Ranchero pickup. Water drowns you; drive in at your peril.
+
+## Everything from before
+Four+ settlements with cul-de-sacs and a trailer park, taxi/vigilante/delivery
+missions (T), three synth radio stations (R), 30 hidden packages, weapon/health/cash
+pickups, bears/stags/coyotes/dogs, golfers and rednecks, overpass + channel bridge
+with true over/under physics.
 
 ## Controls
-WASD move · mouse aim · E enter/exit · Space handbrake · H horn ·
-T missions · R radio · 1/2/3 weapons · Shift sprint
+WASD · mouse aim · E enter/exit · Q switch character · T missions · R radio ·
+H horn · Space handbrake · 1/2/3 weapons · Shift sprint
 
-## Deploy (Cloudflare Pages)
-Drag this folder into Pages. Build command: none. Output dir: `/`.
-Local test: `python3 -m http.server` then open localhost:8000.
-
-All geometry procedural, all audio synthesized. Zero asset files, zero dependencies
-beyond the vendored three.js (r185).
+## Deploy
+Drag the folder into Cloudflare Pages. Build command: none. Output dir: `/`.
+Local: `python3 -m http.server`

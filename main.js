@@ -16,7 +16,10 @@ import { Animals } from './animals.js';
 import { Pickups } from './pickups.js';
 import { Missions } from './missions.js';
 import { Radio } from './radio.js';
-import { buildConnectorRoads } from './terrain.js';
+import { buildConnectorRoads, WATER_Y } from './terrain.js';
+import { buildLandmarks } from './landmarks.js';
+import { DayNight } from './daynight.js';
+import { CHARACTERS } from './config.js';
 
 // ---------- Renderer / scene ----------
 const canvas = document.getElementById('game');
@@ -58,6 +61,7 @@ const world = makeWorld(terrain, stunts);
 const city = buildCity(scene, world);
 world.attachCity(city);
 buildConnectorRoads(scene, world.groundY);
+const landmarks = buildLandmarks(scene, stunts);
 const traffic = new Traffic(scene, world);
 const peds = new Peds(scene);
 const police = new Police(scene, world);
@@ -71,9 +75,69 @@ const missions = new Missions(scene, world, hud);
 const radio = new Radio();
 missions.bind(peds, traffic);
 
-const player = new Player(scene, 262, 232);
+const daynight = new DayNight(scene, hemi, sun, world);
+const player = new Player(scene, CHARACTERS[0].x, CHARACTERS[0].z);
 let cash = 0;
 const unlocked = [true, false, false];
+
+// ---------- Three protagonists, GTA V style ----------
+const chars = CHARACTERS.map((def) => ({
+  def,
+  pos: new THREE.Vector3(def.x, 2, def.z),
+  heading: 0,
+  health: 100,
+  mode: 'foot',
+  car: null,
+}));
+let charIdx = 0;
+let switching = 0;
+let pendingIdx = 0;
+let halfSwapped = false;
+const switchFrom = new THREE.Vector3();
+
+function setCharColors(def) {
+  const mats = player.mesh.userData.mats;
+  for (const m of mats.shirt) m.color.setHex(def.shirt);
+  for (const m of mats.pants) m.color.setHex(def.pants);
+  for (const m of mats.skin) m.color.setHex(def.skin);
+  player.mesh.userData.hat.visible = def.hat;
+}
+setCharColors(CHARACTERS[0]);
+
+function beginSwitch() {
+  if (switching > 0) return;
+  const st = chars[charIdx];
+  st.health = health;
+  st.mode = mode;
+  st.car = mode === 'drive' ? car : null;
+  st.heading = mode === 'drive' && car ? car.heading : player.heading;
+  st.pos.copy(mode === 'drive' && car ? car.pos : player.pos);
+  pendingIdx = (charIdx + 1) % chars.length;
+  switching = 1.5;
+  halfSwapped = false;
+  switchFrom.copy(camPos);
+}
+
+function applyChar(i) {
+  charIdx = i;
+  const st = chars[i];
+  health = st.health;
+  mode = st.mode;
+  car = st.car;
+  setCharColors(st.def);
+  if (mode === 'drive' && car) {
+    player.mesh.visible = car.spec.kind === 'bike';
+    aimYaw = car.heading;
+  } else {
+    mode = 'foot';
+    player.pos.copy(st.pos);
+    player.heading = st.heading;
+    player.mesh.visible = true;
+    player.mesh.rotation.set(0, st.heading, 0);
+    aimYaw = st.heading;
+  }
+  hud.toast(st.def.name);
+}
 
 let mode = 'foot';
 let car = null;
@@ -278,6 +342,11 @@ function handleWeapons(dt) {
   }
 }
 
+// player headlight
+const headlight = new THREE.SpotLight(0xfff4d6, 0, 70, 0.5, 0.45);
+scene.add(headlight);
+scene.add(headlight.target);
+
 // ---------- Camera ----------
 const camPos = new THREE.Vector3(0, 8, 20);
 const lookAt = new THREE.Vector3();
@@ -331,9 +400,29 @@ function tick() {
     if (overlayT <= 0) document.getElementById('overlay').classList.remove('on');
   }
 
-  const ax = input.axis();
+  if (input.justPressed('KeyQ')) beginSwitch();
+
+  const ax = switching > 0 ? { x: 0, y: 0 } : input.axis();
   const hit = { building: false, wall: false, tree: false, landed: false };
-  let threatPos = player.pos, threatSpeed = 0, threatR = 0.1;
+  let threatPos = mode === 'drive' && car ? car.pos : player.pos, threatSpeed = 0, threatR = 0.1;
+
+  if (switching > 0) {
+    switching -= dt;
+    const t = 1 - Math.max(0, switching) / 1.5;
+    if (t >= 0.5 && !halfSwapped) { halfSwapped = true; applyChar(pendingIdx); }
+    const target = halfSwapped
+      ? (chars[charIdx].mode === 'drive' && chars[charIdx].car ? chars[charIdx].car.pos : chars[charIdx].pos)
+      : threatPos;
+    const apex = 180;
+    const k = t < 0.5 ? t * 2 : (1 - t) * 2;
+    camPos.set(
+      switchFrom.x + (target.x - switchFrom.x) * t,
+      Math.max(switchFrom.y, target.y) + apex * Math.sin(k * Math.PI / 2),
+      switchFrom.z + (target.z - switchFrom.z) * t
+    );
+    camera.position.copy(camPos);
+    camera.lookAt(target.x, target.y, target.z);
+  }
 
   if (mode === 'foot') {
     const aiming = weapons.current > 0 && mouseDown && document.pointerLockElement === canvas;
@@ -379,6 +468,27 @@ function tick() {
   weapons.update(dt);
   effects.update(dt);
   radio.setDriving(mode === 'drive');
+  landmarks.update(dt);
+  const nightF = daynight.update(dt, threatPos);
+  police.nightF = nightF;
+
+  // headlight follows the player's car at night
+  if (mode === 'drive' && car && nightF > 0.3) {
+    const f = car.forward();
+    headlight.intensity = 4 * nightF;
+    headlight.position.set(car.pos.x + f.x * 1.5, car.pos.y + 1.3, car.pos.z + f.y * 1.5);
+    headlight.target.position.set(car.pos.x + f.x * 26, car.pos.y - 1, car.pos.z + f.y * 26);
+  } else {
+    headlight.intensity = 0;
+  }
+
+  // water is not your friend
+  if (mode === 'foot' && player.pos.y < WATER_Y - 0.35) {
+    health -= 34 * dt;
+    hud.hint("Can't swim!");
+  } else if (mode === 'drive' && car && !car.dead && car.pos.y < WATER_Y - 0.35) {
+    car.hp -= 80 * dt;
+  }
 
   // mission hint when idling in a mission-capable vehicle
   const aev = animals.update(dt, threatPos, mode === 'foot', mode === 'drive' && car ? car.vel.length() : player.speed);
@@ -423,7 +533,7 @@ function tick() {
   const headingNow = mode === 'drive' && car ? car.heading : player.heading;
   hud.update(dt, threatPos, headingNow, traffic, police, mode);
 
-  updateCamera(dt);
+  if (switching <= 0) updateCamera(dt);
   input.endFrame();
   renderer.render(scene, camera);
 }

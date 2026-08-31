@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SETTLEMENTS, settlementOrigin, settlementExtent, RAMPS, OVERPASS, CHANNEL, GOLF, HIDDEN_PACKAGES } from './config.js';
+import { SETTLEMENTS, settlementOrigin, settlementExtent, RAMPS, OVERPASS, CHANNEL, GOLF, HIDDEN_PACKAGES, PIER, SIGN, MOUNTAIN, VINEYARD, WINDFARM, LAKE } from './config.js';
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -33,11 +33,13 @@ export class Pickups {
       const o = settlementOrigin(s), e = settlementExtent(s);
       fixed.push({ type: 'health', x: o.x + e / 2 + 8, z: o.z + 6 });
     }
-    fixed.push({ type: 'pistol', x: 262, z: 250 });                  // near spawn, downtown
+    fixed.push({ type: 'pistol', x: 432, z: 1020 });                 // near Marcus's spawn
     fixed.push({ type: 'pistol', x: SETTLEMENTS[3].cx + 20, z: SETTLEMENTS[3].cz });
-    fixed.push({ type: 'smg', x: SETTLEMENTS[2].cx, z: SETTLEMENTS[2].cz + 15 }); // Dockside
-    fixed.push({ type: 'smg', x: CHANNEL.x, z: CHANNEL.z0 + 40 });   // south channel mouth
+    fixed.push({ type: 'smg', x: SETTLEMENTS[2].cx, z: SETTLEMENTS[2].cz + 15 }); // the port
+    fixed.push({ type: 'smg', x: CHANNEL.x, z: CHANNEL.z0 + 40 });   // north channel mouth
+    fixed.push({ type: 'smg', x: SETTLEMENTS[4].cx - 30, z: SETTLEMENTS[4].cz }); // Dusty Palms
     fixed.push({ type: 'health', x: GOLF.x + 20, z: GOLF.z });
+    fixed.push({ type: 'health', x: MOUNTAIN.x, z: MOUNTAIN.z + 24 }); // summit aid
     for (const f of fixed) this.add(f.type, f.x, f.z, { respawns: true });
 
     // hidden packages: curated candidate pool, seeded pick
@@ -47,13 +49,19 @@ export class Pickups {
       cands.push({ x: o.x + 5, z: o.z + 5 }, { x: o.x + e - 5, z: o.z + 5 },
                  { x: o.x + 5, z: o.z + e - 5 }, { x: o.x + e - 5, z: o.z + e - 5 });
     }
-    cands.push({ x: CHANNEL.x, z: CHANNEL.z0 + 15 }, { x: CHANNEL.x, z: CHANNEL.z1 - 15 });
-    cands.push({ x: CHANNEL.x, z: 220 });                            // under the overpass, in the channel
+    cands.push({ x: CHANNEL.x, z: CHANNEL.z0 + 15 }, { x: CHANNEL.x, z: CHANNEL.z1 - 60 });
+    cands.push({ x: CHANNEL.x, z: OVERPASS.z });                     // under the overpass, in the channel
     cands.push({ x: (OVERPASS.x0 + OVERPASS.x1) / 2, z: OVERPASS.z }); // ON the overpass
     for (const R of RAMPS) cands.push({ x: R.x, z: R.z + 8 });
     cands.push({ x: GOLF.x - GOLF.r + 20, z: GOLF.z }, { x: GOLF.x, z: GOLF.z + GOLF.r - 20 });
-    cands.push({ x: -780, z: 210 }, { x: 800, z: 700 }, { x: 900, z: -800 }, { x: -1050, z: -1000 },
-               { x: -300, z: 900 }, { x: 640, z: 180 }, { x: 100, z: -700 }, { x: -900, z: 600 });
+    cands.push({ x: PIER.x, z: PIER.z1 - 4 });                       // end of the pier
+    cands.push({ x: MOUNTAIN.x, z: MOUNTAIN.z });                    // the summit
+    cands.push({ x: SIGN.x, z: SIGN.z - 6 });                        // behind the sign
+    cands.push({ x: VINEYARD.x, z: VINEYARD.z });
+    cands.push({ x: WINDFARM.x, z: WINDFARM.z });
+    cands.push({ x: LAKE.x, z: LAKE.z - LAKE.r - 14 });
+    cands.push({ x: -1500, z: 700 }, { x: 1500, z: 400 }, { x: 1600, z: -1500 }, { x: -1600, z: -1700 },
+               { x: -300, z: 1440 }, { x: 1100, z: 300 }, { x: 100, z: -1600 }, { x: -1200, z: 300 });
     // shuffle & take N
     for (let i = cands.length - 1; i > 0; i--) {
       const j = (rand() * (i + 1)) | 0;

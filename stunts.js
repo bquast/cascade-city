@@ -66,9 +66,10 @@ export function buildStunts(scene) {
     }
   }
 
-  function makeDeck(minX, maxX, minZ, maxZ, h) {
+  function makeDeck(minX, maxX, minZ, maxZ, h, color) {
     const w = maxX - minX, d = maxZ - minZ;
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.8, d), deckMat);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.8, d),
+      color ? new THREE.MeshLambertMaterial({ color }) : deckMat);
     slab.position.set((minX + maxX) / 2, h - 0.4, (minZ + maxZ) / 2);
     slab.castShadow = slab.receiveShadow = true;
     scene.add(slab);
@@ -115,5 +116,5 @@ export function buildStunts(scene) {
     return h;
   }
 
-  return { rampY, deckAt, decks };
+  return { rampY, deckAt, decks, addDeck: makeDeck };
 }

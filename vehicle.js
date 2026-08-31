@@ -7,7 +7,14 @@ export const CATALOG = [
   { name: 'Mule Van', kind: 'van',   accel: 18, top: 27, turn: 1.9, colors: [0x7d7a72, 0x5b6b70, 0x8a6a4f] },
   { name: 'Vesper',   kind: 'sport', accel: 38, top: 46, turn: 2.7, colors: [0xc23b22, 0x1f6f8b, 0xd8d8d8] },
   { name: 'Wasp',     kind: 'bike',  accel: 36, top: 44, turn: 3.3, colors: [0xb03030, 0x2a2a2a, 0x2f6070] },
+  { name: 'Brawler',  kind: 'sedan', accel: 34, top: 42, turn: 2.2, colors: [0x1f1f22, 0xc26a1f, 0x7a1f1f] },
+  { name: 'Ranchero', kind: 'van',   accel: 22, top: 33, turn: 2.1, colors: [0x8a5a3a, 0x5a6b52, 0x9a3a2a, 0x7a7a72] },
 ];
+
+const HEADLIGHT_MATS = [];
+export function setNightLights(on) {
+  for (const m of HEADLIGHT_MATS) m.color.setHex(on ? 0xfff8dc : 0x9a9070);
+}
 
 export const COP_SPEC = { name: 'Patrol', kind: 'sedan', accel: 30, top: 38, turn: 2.5, colors: [0xe8e8e8], cop: true };
 
@@ -95,7 +102,8 @@ export function makeCarMesh(spec, colorHex) {
   }
 
   // headlights + brake lights (emissive toggled while braking)
-  const hlMat = new THREE.MeshBasicMaterial({ color: 0xfff2c4 });
+  const hlMat = new THREE.MeshBasicMaterial({ color: 0x9a9070 });
+  HEADLIGHT_MATS.push(hlMat);
   const blMat = new THREE.MeshBasicMaterial({ color: 0x3a0d0d });
   for (const side of [-1, 1]) {
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.1), hlMat);

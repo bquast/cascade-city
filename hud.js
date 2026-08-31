@@ -1,5 +1,5 @@
-import { PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementOrigin, settlementExtent } from './config.js';
-import { groundY, WATER_Y, channelCut } from './terrain.js';
+import { PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementOrigin, settlementExtent, SIGN, PIER, OCEAN } from './config.js';
+import { groundY, WATER_Y, channelCut, desertF } from './terrain.js';
 
 const VIEW = 460; // world units shown across the minimap
 
@@ -35,10 +35,13 @@ export class Hud {
         if (channelCut(x, z) > 0.4) c.fillStyle = '#7d7d7b';
         else if (Math.hypot(x - GOLF.x, z - GOLF.z) < GOLF.r) c.fillStyle = '#4f8a3e';
         else if (y < WATER_Y + 0.5) c.fillStyle = '#3f6d7a';
-        else if (y > 16) c.fillStyle = '#8a8078';
+        else if (y > 60) c.fillStyle = '#9a938c';
+        else if (y > 30) c.fillStyle = '#8a8078';
         else {
           const t = Math.max(0, Math.min(1, y / 16));
-          c.fillStyle = `rgb(${(111 + t * 32) | 0},138,77)`;
+          const df = desertF(x, z);
+          const r0 = 111 + t * 32, g0 = 138, b0 = 77;
+          c.fillStyle = `rgb(${(r0 + (176 - r0) * df * 0.85) | 0},${(g0 + (154 - g0) * df * 0.85) | 0},${(b0 + (104 - b0) * df * 0.85) | 0})`;
         }
         c.fillRect(a * cell, b * cell, cell + 1, cell + 1);
       }
@@ -81,6 +84,15 @@ export class Hud {
     c.textAlign = 'center';
     for (const s of SETTLEMENTS) c.fillText(s.name.toUpperCase(), w2b(s.cx), w2b(s.cz - settlementExtent(s) / 2 - 14));
     c.fillText('GOLF CLUB', w2b(GOLF.x), w2b(GOLF.z - GOLF.r - 10));
+    c.fillText('MT. CASCADE', w2b(-1150), w2b(-1150));
+    c.save();
+    c.fillStyle = '#f2efe6';
+    c.font = 'bold 8px sans-serif';
+    c.fillText('CASCADE', w2b(SIGN.x), w2b(SIGN.z));
+    c.restore();
+    // pier
+    c.fillStyle = '#7a6a52';
+    c.fillRect(w2b(PIER.x - PIER.w / 2), w2b(PIER.z0), PIER.w * this.baseScale, (PIER.z1 - PIER.z0) * this.baseScale);
   }
 
   setMission(label, timer, tx, tz) {
@@ -151,7 +163,7 @@ export class Hud {
     }
     if (police.stars !== this.lastStars) {
       this.lastStars = police.stars;
-      this.starsEl.textContent = '★'.repeat(police.stars) + '☆'.repeat(3 - police.stars);
+      this.starsEl.textContent = '★'.repeat(police.stars) + '☆'.repeat(5 - police.stars);
       this.starsEl.classList.toggle('hot', police.stars > 0);
     }
   }

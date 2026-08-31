@@ -115,6 +115,26 @@ export function buildCity(scene, world) {
             }
             addCol(s, i, j, cx - 1.25, cz - 3.1, 2.5, 6.2);
           }
+        } else if (s.type === 'trailer') {
+          // Dusty Palms: rows of trailers, propane-and-lawn-chair energy
+          const TRAILERS = [0xb8b0a0, 0x9aa4a8, 0xb09a80, 0x8a9a8a, 0xa89078];
+          for (let ti = 0; ti < 5; ti++) {
+            const rot = rand() < 0.5;
+            const w = rot ? 3.2 : 8.5, dep = rot ? 8.5 : 3.2;
+            const cx = bx + 6 + rand() * (BLOCK_W - 12 - w) + w / 2;
+            const cz = bz + 6 + rand() * (BLOCK_W - 12 - dep) + dep / 2;
+            const col = TRAILERS[(rand() * TRAILERS.length) | 0];
+            addBoxC(s, i, j, cx, cz, w, 2.8, dep, col);
+            // skirting + flat roof lip
+            boxes.push({ x: cx, z: cz, w: w + 0.5, h: 0.5, dep: dep + 0.5, color: 0x5a544c, yBase: gy(cx, cz) - 0.3, hExtra: 0.3 });
+            boxes.push({ x: cx, z: cz, w: w + 0.4, h: 0.22, dep: dep + 0.4, color: 0x6a655c, yBase: gy(cx, cz) + 2.8, hExtra: 0 });
+          }
+          // junk: a crate or two
+          for (let jk = 0; jk < 2; jk++) {
+            const jx = bx + 8 + rand() * (BLOCK_W - 16);
+            const jz = bz + 8 + rand() * (BLOCK_W - 16);
+            boxes.push({ x: jx, z: jz, w: 1.4, h: 1.2, dep: 1.4, color: 0x7a5a3a, yBase: gy(jx, jz) - 0.2, hExtra: 0.2 });
+          }
         } else if (s.type === 'rural') {
           // barn + shacks, loose layout
           const bw = 10 + rand() * 3, bd = 8 + rand() * 2, bh = 5 + rand() * 2;

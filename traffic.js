@@ -196,6 +196,7 @@ const _Q = new THREE.Quaternion();
 const _V1 = new THREE.Vector3();
 const _S = new THREE.Vector3(1, 1, 1);
 const HICKORY = SETTLEMENTS.find((s) => s.id === 'hickory');
+const DUSTY = SETTLEMENTS.find((s) => s.id === 'dusty');
 
 export class Peds {
   constructor(scene) {
@@ -220,12 +221,12 @@ export class Peds {
     this.list = [];
     const col = new THREE.Color();
     for (let n = 0; n < PEDS; n++) {
-      // 110 city, 55 palms, 25 docks, 25 rednecks, 25 golfers
+      // 120 city, 50 palms, 20 port, 40 rednecks (Hickory + Dusty Palms), 30 golfers
       let kind = 'urban', home = null;
-      if (n < 110) home = SETTLEMENTS[0];
-      else if (n < 165) home = SETTLEMENTS[1];
+      if (n < 120) home = SETTLEMENTS[0];
+      else if (n < 170) home = SETTLEMENTS[1];
       else if (n < 190) home = SETTLEMENTS[2];
-      else if (n < 215) { kind = 'redneck'; }
+      else if (n < 230) { kind = 'redneck'; }
       else { kind = 'golfer'; }
       const shirts = kind === 'redneck' ? REDNECK_SHIRTS : kind === 'golfer' ? GOLFER_SHIRTS : URBAN_SHIRTS;
       const shirt = pick(shirts), pants = pick(PANTS), skin = pick(SKINS);
@@ -262,7 +263,11 @@ export class Peds {
   }
 
   homeCenter(p) {
-    return p.kind === 'redneck' ? { x: HICKORY.cx, z: HICKORY.cz, r: 110 } : { x: GOLF.x, z: GOLF.z, r: GOLF.r - 15 };
+    if (p.kind === 'redneck') {
+      const h = p.idx % 2 === 0 ? DUSTY : HICKORY;
+      return { x: h.cx, z: h.cz, r: h === DUSTY ? 150 : 110 };
+    }
+    return { x: GOLF.x, z: GOLF.z, r: GOLF.r - 15 };
   }
 
   newWanderTarget(p) {
@@ -296,8 +301,12 @@ export class Peds {
   }
 
   update(dt, threatPos, threatSpeed, threatRadius, world, onDown) {
+    this.frame = (this.frame || 0) + 1;
     for (const p of this.list) {
       if (p.mode === 'ride') continue; // in the player's taxi
+      // LOD: distant peds simulate at quarter rate (invisible, big CPU win)
+      const ddx = p.pos.x - threatPos.x, ddz = p.pos.z - threatPos.z;
+      if (ddx * ddx + ddz * ddz > 122500 && ((this.frame + p.idx) & 3) !== 0) continue;
       if (p.mode === 'down') {
         p.t -= dt;
         if (p.t <= 0) {

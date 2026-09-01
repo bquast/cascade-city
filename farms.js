@@ -75,7 +75,7 @@ export function buildFarms(scene, world, terrain) {
 
     // machinery
     parked.push({ spec: SPECIALS.tractor, color: SPECIALS.tractor.colors[0], x: F.x - 50, z: F.z - 44, heading: rand() * 6.28 });
-    parked.push({ spec: CATALOG.find((c) => c.name === 'Ranchero'), color: 0x8a5a3a, x: F.x - 68, z: F.z - 44, heading: rand() * 6.28 });
+    parked.push({ spec: CATALOG.find((c) => c.base === 'Ranchero'), color: 0x8a5a3a, x: F.x - 68, z: F.z - 44, heading: rand() * 6.28 });
   }
   parked.push({ spec: SPECIALS.combine, color: SPECIALS.combine.colors[0], x: FARMS[0].x + 30, z: FARMS[0].z + 20, heading: 1.2 });
 

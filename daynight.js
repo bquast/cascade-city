@@ -3,9 +3,11 @@ import { SETTLEMENTS, settlementOrigin, PITCH, ROAD_W, DAY_LEN } from './config.
 import { setNightLights } from './vehicle.js';
 import { setWindowsNight } from './city.js';
 
-const DAY_SKY = new THREE.Color(0x87b5d4);
-const DUSK_SKY = new THREE.Color(0xd88a5a);
-const NIGHT_SKY = new THREE.Color(0x0a1220);
+import { getEra } from './era.js';
+const ERA = getEra();
+const DAY_SKY = new THREE.Color(ERA.sky.day);
+const DUSK_SKY = new THREE.Color(ERA.sky.dusk);
+const NIGHT_SKY = new THREE.Color(ERA.sky.night);
 const _sky = new THREE.Color();
 
 export class DayNight {

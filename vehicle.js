@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { WATER_Y as WATER_LEVEL } from './terrain.js';
+import { getEra } from './era.js';
+const ERA = getEra();
 
 // Original vehicle catalogue — names are ours, vibe is early-2000s.
 export const CATALOG = [
@@ -24,7 +26,16 @@ export function setNightLights(on) {
   for (const m of HEADLIGHT_MATS) m.color.setHex(on ? 0xfff8dc : 0x9a9070);
 }
 
-export const COP_SPEC = { name: 'Patrol', kind: 'sedan', accel: 30, top: 38, turn: 2.5, colors: [0xe8e8e8], cop: true };
+// era transform: names, speeds, palettes
+for (const c of CATALOG) {
+  c.base = c.name;
+  if (ERA.carNames[c.name]) c.name = ERA.carNames[c.name];
+  c.top = Math.round(c.top * ERA.topMul);
+  c.accel = Math.round(c.accel * ERA.accelMul);
+  if (ERA.carColors) c.colors = ERA.carColors;
+}
+
+export const COP_SPEC = { name: ERA.copName, kind: 'sedan', accel: Math.round(30 * ERA.accelMul), top: Math.round(38 * ERA.topMul) + 4, turn: 2.5, colors: [ERA.copColor], cop: true };
 
 const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.32, 16);
 wheelGeo.rotateZ(Math.PI / 2);
@@ -229,14 +240,19 @@ export function makeCarMesh(spec, colorHex) {
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
   const glassMat = new THREE.MeshLambertMaterial({ color: 0x22303a });
-  const dims = {
+  let dims = {
     sedan: { L: 4.4, W: 2.0, bodyH: 0.85, cabL: 2.1, cabH: 0.7, cabZ: 0.25 },
     taxi:  { L: 4.4, W: 2.0, bodyH: 0.85, cabL: 2.1, cabH: 0.7, cabZ: 0.25 },
     van:   { L: 4.9, W: 2.15, bodyH: 1.5, cabL: 3.4, cabH: 0.75, cabZ: 0.55 },
     sport: { L: 4.3, W: 2.05, bodyH: 0.65, cabL: 1.8, cabH: 0.55, cabZ: 0.35 },
   }[spec.kind];
+  if (ERA.vintage === '1935') {
+    dims = { ...dims, W: dims.W * 0.9, bodyH: dims.bodyH * 1.3, cabH: dims.cabH * 1.35, cabL: dims.cabL * 0.85, L: dims.L * 0.95 };
+  } else if (ERA.vintage === '1948') {
+    dims = { ...dims, bodyH: dims.bodyH * 1.12, cabH: dims.cabH * 1.1 };
+  }
 
-  const body = chamfer(dims.W, dims.bodyH, dims.L, bodyMat, 0.14);
+  const body = chamfer(dims.W, dims.bodyH, dims.L, bodyMat, ERA.vintage === '1948' ? 0.26 : 0.14);
   body.position.y = 0.55 + dims.bodyH / 2 - 0.42;
   g.add(body);
 
@@ -267,6 +283,33 @@ export function makeCarMesh(spec, colorHex) {
   grille.position.set(0, body.position.y + 0.08, -dims.L / 2 - 0.02);
   g.add(bumpF, bumpR, grille);
 
+  if (ERA.vintage) {
+    // running boards + upright radiator + spare wheel on the back
+    for (const sd of [-1, 1]) {
+      const board = box(0.28, 0.1, dims.L * 0.55, 0x1c1c1e);
+      board.position.set(sd * (dims.W / 2 + 0.12), body.position.y - dims.bodyH / 2 - 0.04, 0.15);
+      g.add(board);
+      // fender arcs over the wheels
+      for (const wz of [-dims.L / 2 + 0.85, dims.L / 2 - 0.85]) {
+        const fender = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.34, 10, 1, false, Math.PI, Math.PI), new THREE.MeshLambertMaterial({ color: 0x1c1c1e }));
+        fender.rotation.z = Math.PI / 2;
+        fender.position.set(sd * (dims.W / 2 - 0.05), 0.52, wz);
+        g.add(fender);
+      }
+    }
+    const radiator = box(dims.W * 0.45, 0.75, 0.14, 0x2a2a2e);
+    radiator.position.set(0, body.position.y + 0.34, -dims.L / 2 - 0.04);
+    const spare = new THREE.Mesh(wheelGeo, wheelMat);
+    spare.rotation.y = Math.PI / 2;
+    spare.scale.setScalar(0.95);
+    spare.position.set(0, body.position.y + 0.15, dims.L / 2 + 0.2);
+    g.add(radiator, spare);
+  }
+  if (ERA.vintage === '1948') {
+    // whitewall rings get added with the wheels below via userData flag
+    g.userData.whitewalls = true;
+  }
+
   if (spec.kind === 'taxi') {
     const sign = box(0.8, 0.28, 0.5, 0x222222);
     sign.position.set(0, cab.position.y + dims.cabH / 2 + 0.16, dims.cabZ);
@@ -274,7 +317,7 @@ export function makeCarMesh(spec, colorHex) {
   }
 
   if (spec.cop) {
-    const stripe = box(dims.W + 0.04, 0.3, dims.L * 0.55, 0x1a1a1a);
+    const stripe = box(dims.W + 0.04, 0.3, dims.L * 0.55, ERA.copStripe);
     stripe.position.set(0, body.position.y, 0);
     g.add(stripe);
     const redMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
@@ -310,6 +353,11 @@ export function makeCarMesh(spec, colorHex) {
     const w = new THREE.Mesh(wheelGeo, wheelMat);
     const hub = new THREE.Mesh(hubGeo, hubMat);
     w.add(hub);
+    if (g.userData.whitewalls) {
+      const ww = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.36, 14), new THREE.MeshLambertMaterial({ color: 0xe8e4da }));
+      ww.rotation.z = Math.PI / 2;
+      w.add(ww);
+    }
     pivot.add(w);
     g.add(pivot);
     wheels.push({ pivot, wheel: w, front });

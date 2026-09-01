@@ -1,4 +1,19 @@
-# Cascade City v7 — "Country Life"
+# Cascade City v8 — "Eras"
+
+## Pick your decade (start screen)
+- **1935 — THE GOLDEN AGE**: sepia streets, tall boxy motorcars with running boards,
+  fenders and rear spares, everyone in a hat, hot jazz on HOT FIVE 78, black
+  Prowler squad cars, a 10-story skyline, no wind turbines — and no police
+  helicopters. Top speeds ~30% lower: it's 1935.
+- **1948 — CITY OF ANGELS**: desaturated noir grade, rounded chrome sedans on
+  whitewalls, Black & Whites on your tail, slow smoke on KMYS MIDNIGHT, fedoras
+  everywhere, mid-rise skyline.
+- **1994 — WEST COAST**: full color, full skyline, G-funk whistle on WESTSIDE 94.1,
+  funk rock on FLEA FM, and helicopters at 4 stars.
+
+Same city, same missions, same three protagonists — a different world each time.
+
+# v7 — "Country Life"
 
 The living-countryside + fidelity round. 4km x 4km, vanilla three.js, no build step.
 

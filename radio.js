@@ -1,16 +1,14 @@
 // Synthesized radio stations — zero audio files, pure WebAudio scheduling.
+// Tables + tempos come from the active era (1935 hot jazz / 1948 noir / 1994 west coast).
+import { getEra } from './era.js';
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
-const STATIONS = [
-  { name: 'DRIP 91.3 — lofi', bpm: 76, loop: 32 },
-  { name: 'NEON 84 — synthwave', bpm: 112, loop: 32 },
-  { name: 'K-KTRY 101 — country', bpm: 100, loop: 16 },
-];
-
-const LOFI_CHORDS = [[57, 60, 64, 67], [53, 57, 60, 65], [48, 52, 55, 59], [55, 59, 62, 64]];
-const NEON_BASS = [45, 45, 48, 45, 50, 45, 48, 52, 45, 45, 48, 45, 43, 43, 47, 50];
-const NEON_LEAD = [69, 72, 74, 76, 74, 72, 69, 67];
-const KTRY_PLUCK = [55, 59, 62, 59, 55, 60, 64, 60, 57, 60, 64, 60, 55, 59, 62, 66];
+const R = getEra().radio;
+const STATIONS = R.stations;
+const LOFI_CHORDS = R.chords;
+const NEON_BASS = R.bass;
+const NEON_LEAD = R.lead;
+const KTRY_PLUCK = R.pluck;
 
 export class Radio {
   constructor() {
@@ -95,7 +93,8 @@ export class Radio {
   kick(t, vol = 0.5) { this.osc('sine', 120, t, 0.28, vol, 42); }
 
   schedule(st, b, t, spb) {
-    if (st === 0) { // lofi
+    if (R.swing && b % 2 === 1) t += spb * 0.3; // shuffle feel
+    if (st === 0) { // chords + dust
       if (b % 8 === 0) {
         const ch = LOFI_CHORDS[(b / 8) | 0];
         for (const n of ch) this.osc('sine', NOTE(n), t, 1.9, 0.10);
@@ -103,14 +102,15 @@ export class Radio {
       }
       if (b % 8 === 0 || b % 8 === 5) this.kick(t, 0.4);
       if (b % 2 === 1) this.noise(t, 0.05, 0.05, true);
-      if (Math.random() < 0.35) this.noise(t + Math.random() * spb, 0.02, 0.03, true); // vinyl crackle
-    } else if (st === 1) { // synthwave
+      if (Math.random() < R.vinyl) this.noise(t + Math.random() * spb, 0.02, 0.03, true); // shellac crackle
+    } else if (st === 1) { // the era's signature station
       const bn = NEON_BASS[b % 16];
-      this.osc('sawtooth', NOTE(bn), t, spb * 0.9, 0.11);
-      this.osc('sawtooth', NOTE(bn) * 1.005, t + spb / 2, spb * 0.45, 0.08);
-      if (b % 2 === 0) this.kick(t, 0.5);
-      if (b % 8 === 4) this.noise(t, 0.14, 0.2, true);
-      if (b % 4 === 0) this.osc('square', NOTE(NEON_LEAD[(b / 4) % 8]), t, spb * 3.4, 0.05);
+      this.osc(R.bassWave, NOTE(bn), t, spb * 0.9, 0.11);
+      if (R.kicky) this.osc(R.bassWave, NOTE(bn) * 1.005, t + spb / 2, spb * 0.45, 0.08);
+      if (b % 2 === 0 && R.kicky) this.kick(t, 0.5);
+      if (b % 4 === 0 && !R.kicky) this.kick(t, 0.28);
+      if (b % 8 === 4) this.noise(t, 0.14, R.kicky ? 0.2 : 0.1, true);
+      if (b % 4 === 0) this.osc(R.leadWave, NOTE(NEON_LEAD[(b / 4) % 8] + R.leadOct), t, spb * 3.4, R.leadOct ? 0.045 : 0.05);
     } else { // country
       this.osc('triangle', NOTE(KTRY_PLUCK[b % 16]), t, 0.22, 0.14);
       if (b % 8 === 0) this.osc('triangle', NOTE(43), t, 0.5, 0.16);

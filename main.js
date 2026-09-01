@@ -25,6 +25,8 @@ import { SPECIALS } from './vehicle.js';
 import { SETTLEMENTS, settlementExtent } from './config.js';
 import { DayNight } from './daynight.js';
 import { CHARACTERS } from './config.js';
+import { getEra } from './era.js';
+const ERA = getEra();
 
 // ---------- Renderer / scene ----------
 const canvas = document.getElementById('game');
@@ -33,6 +35,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.domElement.style.filter = ERA.filter;
 
 const scene = new THREE.Scene();
 const SKY = 0xd8b78a;
@@ -117,6 +120,7 @@ function setCharColors(def) {
   player.mesh.userData.hat.visible = def.hat;
 }
 setCharColors(CHARACTERS[0]);
+setTimeout(() => hud.toast(ERA.label), 1200);
 
 function beginSwitch() {
   if (switching > 0) return;

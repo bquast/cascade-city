@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { SETTLEMENTS, settlementOrigin, settlementExtent, PITCH, ROAD_W, BLOCK_W, LANE_OFF, GOLF, TRAFFIC_CARS, PARKED_CARS, PEDS, CONNECTORS, FARMS } from './config.js';
 import { CATALOG, makeCarMesh } from './vehicle.js';
 import * as VEH from './vehicle.js';
+import { getEra } from './era.js';
+const ERA = getEra();
 
 const rand = Math.random;
 const pick = (arr) => arr[(rand() * arr.length) | 0];
@@ -52,7 +54,7 @@ export class Traffic {
       const sg = this.hwSegs[si];
       const rural = sg.z0 < 300 && sg.z1 < 300;
       const pool = rural
-        ? [CATALOG[0], CATALOG.find((c) => c.name === 'Ranchero'), CATALOG.find((c) => c.name === 'Ranchero'), SPECIALS.tractor, CATALOG[6]]
+        ? [CATALOG[0], CATALOG.find((c) => c.base === 'Ranchero'), CATALOG.find((c) => c.base === 'Ranchero'), SPECIALS.tractor, CATALOG[6]]
         : CATALOG;
       const spec = pool[(Math.random() * pool.length) | 0];
       const car = {
@@ -328,7 +330,9 @@ export class Peds {
       const shirts = kind === 'redneck' ? REDNECK_SHIRTS
         : kind === 'hillbilly' ? HILLBILLY_SHIRTS
         : kind === 'vaquero' ? VAQUERO_SHIRTS
-        : kind === 'golfer' ? GOLFER_SHIRTS : URBAN_SHIRTS;
+        : kind === 'golfer' ? GOLFER_SHIRTS
+        : (ERA.pedShirts || URBAN_SHIRTS);
+      const eraHat = kind === 'urban' && Math.random() < ERA.hatRate;
       const shirt = pick(shirts), pants = pick(PANTS), skin = pick(SKINS);
       this.torso.setColorAt(n, col.setHex(shirt));
       this.armL.setColorAt(n, col.setHex(shirt));
@@ -337,13 +341,14 @@ export class Peds {
       this.legR.setColorAt(n, col.setHex(pants));
       this.head.setColorAt(n, col.setHex(skin));
       this.hat.setColorAt(n, col.setHex(
-        kind === 'redneck' ? 0xe84a4a
+        eraHat ? ERA.hatColors[(Math.random() * ERA.hatColors.length) | 0]
+        : kind === 'redneck' ? 0xe84a4a
         : kind === 'hillbilly' ? 0xc9b26a
         : kind === 'vaquero' ? 0x4a3a2a
         : 0xe84a4a));
 
       const p = {
-        idx: n, kind, home,
+        idx: n, kind, home, eraHat,
         pos: new THREE.Vector3(0, 0.3, 0),
         heading: rand() * 6.28,
         mode: 'walk', t: 0, phase: rand() * 6, swing: 0,
@@ -513,7 +518,7 @@ export class Peds {
       this.part(this.armL, p.idx, -0.42, 1.44, 0, golferIdle ? -1.4 - s : -s * 0.8);
       this.part(this.armR, p.idx, 0.42, 1.44, 0, golferIdle ? -1.4 - s : s * 0.8);
       // hat only for rednecks + golfers
-      const hatScale = p.kind === 'urban' || hidden ? 0.0001 : p.kind === 'golfer' ? 0.75 : p.kind === 'vaquero' ? 1.55 : 1.1;
+      const hatScale = hidden ? 0.0001 : p.kind === 'urban' ? (p.eraHat ? 0.9 : 0.0001) : p.kind === 'golfer' ? 0.75 : p.kind === 'vaquero' ? 1.55 : 1.1;
       _L.makeScale(hatScale, hatScale, hatScale);
       _L.setPosition(0, 1.96, 0);
       _P.multiplyMatrices(_M, _L);

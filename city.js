@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { ROAD_W, BLOCK_W, PITCH, SETTLEMENTS, settlementOrigin, settlementExtent, GOLF } from './config.js';
 import { ribbon, curveRibbon, HEIGHTS_PTS } from './terrain.js';
+import { getEra } from './era.js';
+const ERA = getEra();
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -346,7 +348,7 @@ export function buildCity(scene, world, terrain) {
   {
     const wins = [];
     for (const T of towers) {
-      const floors = Math.min(26, Math.floor(T.h / 3.4));
+      const floors = Math.min(ERA.maxFloors, Math.floor(T.h / 3.4));
       for (const [nx, nz, face] of [[0, -1, 0], [0, 1, Math.PI], [-1, 0, Math.PI / 2], [1, 0, -Math.PI / 2]]) {
         const faceW = nx === 0 ? T.w : T.dep;
         const cols = Math.max(2, Math.floor(faceW / 2.6));

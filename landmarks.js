@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { SIGN, WINDFARM, PIER, VINEYARD, SETTLEMENTS } from './config.js';
+import { getEra } from './era.js';
+const ERA = getEra();
 import { SPECIALS, makeCarMesh } from './vehicle.js';
 import { groundY } from './terrain.js';
 
@@ -30,7 +32,7 @@ export function buildLandmarks(scene, stunts) {
   // ---- Wind farm ----
   const poleMat = new THREE.MeshLambertMaterial({ color: 0xd8d8d4 });
   const bladeMat = new THREE.MeshLambertMaterial({ color: 0xe8e8e4 });
-  for (let i = 0; i < WINDFARM.count; i++) {
+  for (let i = 0; i < (ERA.turbines ? WINDFARM.count : 0); i++) {
     const a = (i / WINDFARM.count) * Math.PI * 2 + i * 1.7;
     const r = (i % 3 + 1) / 3 * WINDFARM.r;
     const tx = WINDFARM.x + Math.cos(a) * r;

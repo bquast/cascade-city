@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WORLD_HALF } from './config.js';
 import { COP_SPEC, makeCarMesh } from './vehicle.js';
+import { getEra } from './era.js';
+const ERA = getEra();
 
 const MAX_STARS = 5;
 
@@ -85,7 +87,7 @@ export class Police {
     while (this.cops.length > want) this.removeCop(this.cops[this.cops.length - 1]);
 
     // helicopters at 4+ stars
-    const wantHeli = this.stars >= 5 ? 2 : this.stars >= 4 ? 1 : 0;
+    const wantHeli = !ERA.helis ? 0 : this.stars >= 5 ? 2 : this.stars >= 4 ? 1 : 0;
     while (this.helis.length < wantHeli) this.spawnHeli(playerPos);
     while (this.helis.length > wantHeli) {
       const h = this.helis.pop();

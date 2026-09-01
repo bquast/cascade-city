@@ -21,7 +21,8 @@ import { buildLandmarks } from './landmarks.js';
 import { buildAirports } from './airports.js';
 import { buildFarms } from './farms.js';
 import { Birds } from './birds.js';
-import { SPECIALS } from './vehicle.js';
+import { buildServices } from './services.js';
+import { SPECIALS, makeCarMesh } from './vehicle.js';
 import { SETTLEMENTS, settlementExtent } from './config.js';
 import { DayNight } from './daynight.js';
 import { CHARACTERS } from './config.js';
@@ -73,6 +74,7 @@ const landmarks = buildLandmarks(scene, stunts);
 const airports = buildAirports(scene, world);
 const farms = buildFarms(scene, world, terrain);
 const birds = new Birds(scene, terrain.treeSpots, world);
+const services = buildServices(scene, world, terrain, stunts);
 const traffic = new Traffic(scene, world);
 const peds = new Peds(scene);
 const police = new Police(scene, world);
@@ -91,6 +93,17 @@ traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[0], 452, 1560, Math.PI, -2
 traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[1], 330, 1580, 2.6, -2.9);
 traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[0], -350, -930, 1.2, -2.9);
 traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[1], 1180, 1440, 0.4, -2.9);
+for (const st of services.stations) {
+  traffic.addParked(COP_SPEC, COP_SPEC.colors[0], st.x - 12, st.z + 10, Math.PI / 2);
+  traffic.addParked(COP_SPEC, COP_SPEC.colors[0], st.x - 12, st.z + 16, Math.PI / 2);
+}
+traffic.addParked(SPECIALS.firetruck, 0xb01f1a, 496, 1322, Math.PI);
+for (const bs of services.marina.boatSpots) traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[0], bs.x, bs.z, bs.heading, -2.9);
+for (let i = 0; i < 2; i++) {
+  const bm = makeCarMesh(SPECIALS.boat, [0xd8a02a, 0x2a6a8a][i]);
+  scene.add(bm);
+  services.addLakeBoat(bm, i * 2.6);
+}
 
 const daynight = new DayNight(scene, hemi, sun, world);
 const player = new Player(scene, CHARACTERS[0].x, CHARACTERS[0].z);
@@ -229,6 +242,13 @@ function splash(pos) {
     health -= 55 * (1 - player.pos.distanceTo(pos) / 8) + 10;
     shake = Math.min(0.8, shake + 0.5);
   }
+  for (const pm of services.pumps) {
+    if (!pm.dead && Math.hypot(pm.x - pos.x, pm.z - pos.z) < 9) {
+      pm.dead = true;
+      pm.mesh.scale.y = 0.4;
+      effects.chain(0.25 + Math.random() * 0.3, () => { effects.boom(new THREE.Vector3(pm.x, pm.mesh.position.y + 1, pm.z)); splash(pm.mesh.position); });
+    }
+  }
   police.crime(1.0);
 }
 
@@ -293,6 +313,31 @@ function showOverlay(text) {
   el.textContent = text;
   el.classList.add('on');
   overlayT = 2.2;
+}
+
+let robZone = null, robT = 0;
+function serviceInteract(zone) {
+  if (zone.type === 'heal' || zone.type === 'hospital') {
+    if (cash >= 50 && health < 100) { cash -= 50; health = 100; hud.toast('Patched up'); }
+    else hud.toast(health >= 100 ? 'Already healthy' : 'Need $50');
+  } else if (zone.type === 'eat') {
+    if (cash >= 40 && health < 100) { cash -= 40; health = 100; hud.toast(zone.name + ': delicious'); }
+    else hud.toast(health >= 100 ? 'Not hungry' : 'Need $40');
+  } else if (zone.type === 'store') {
+    if (cash >= 25 && health < 100) { cash -= 25; health = Math.min(100, health + 25); hud.toast('Snack: +25'); }
+    else { robZone = zone; robT = 2.5; hud.toast('Robbing...'); }
+  } else if (zone.type === 'spray') {
+    if (!car) return;
+    if (cash >= 150) {
+      cash -= 150;
+      car.hp = Math.min(car.spec.hp || 100, car.hp + 1000);
+      car.dead = false;
+      police.clear();
+      hud.toast('Resprayed. Heat\'s off.');
+    } else hud.toast('Need $150');
+  } else if (zone.type === 'office') {
+    hud.toast(zone.label);
+  }
 }
 
 function nearestRespawn(p) {
@@ -500,6 +545,33 @@ function tick() {
   farms.update(dt);
   birds.update(dt, threatPos);
   traffic.updateHighway(dt, threatPos);
+  const pumpEvents = services.update(dt, daynight.nightF, mode === 'drive' ? car : null);
+  for (const ev of pumpEvents) {
+    const bpos = new THREE.Vector3(ev.x, world.groundY(ev.x, ev.z) + 1, ev.z);
+    effects.boom(bpos);
+    splash(bpos);
+  }
+  // active service zone
+  const zone = services.nearestZone(threatPos, mode === 'drive');
+  if (zone && (mode === 'foot' || (zone.type === 'spray' && (car?.vel.length() ?? 9) < 2.5))) {
+    hud.hint(zone.label);
+    if (input.justPressed('KeyE') && zone.type !== 'store') serviceInteract(zone);
+    if (input.justPressed('KeyE') && zone.type === 'store') serviceInteract(zone);
+  }
+  if (robT > 0 && robZone) {
+    if (mode !== 'foot' || Math.hypot(threatPos.x - robZone.x, threatPos.z - robZone.z) > robZone.r + 1.5) {
+      robT = 0; robZone = null; hud.toast('Robbery abandoned');
+    } else {
+      robT -= dt;
+      if (robT <= 0) {
+        const take = 150 + ((Math.random() * 250) | 0);
+        cash += take;
+        hud.toast('Register cleaned out: $' + take);
+        police.crime(2.4);
+        robZone = null;
+      }
+    }
+  }
   const nightF = daynight.update(dt, threatPos);
   police.nightF = nightF;
 
@@ -554,12 +626,14 @@ function tick() {
 
   if (ev.busted) {
     showOverlay('BUSTED');
-    const rp = nearestRespawn(threatPos);
-    respawn(rp.x, rp.z);
+    let bp = null, bd = 1e9;
+    for (const st of services.stations) { const d = Math.hypot(threatPos.x - st.x, threatPos.z - st.z); if (d < bd) { bd = d; bp = st; } }
+    respawn(bp.x - 14, bp.z);
   } else if (health <= 0) {
     showOverlay('WASTED');
-    const rp = nearestRespawn(threatPos);
-    respawn(rp.x, rp.z);
+    let hp2 = null, hd = 1e9;
+    for (const h of services.hospitals) { const d = Math.hypot(threatPos.x - h.x, threatPos.z - h.z); if (d < hd) { hd = d; hp2 = h; } }
+    respawn(hp2.x, hp2.z + 12);
   }
   hud.setHealth(health);
 

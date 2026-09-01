@@ -1,4 +1,29 @@
-# Cascade City v9 — "The Range"
+# Cascade City v10 — "Open for Business"
+
+The world now has working buildings:
+- **Gas stations** (3, on the highways): drive onto the blue pad, E = full repair
+  AND your wanted level cleared for $150 — the Pay'n'Spray. The pumps explode if
+  you ram them or if anything blows up nearby. Chain reactions are your problem.
+- **Stores** (5): E buys a $25 snack (+25 health)... or hold your nerve for 2.5
+  seconds and ROB the register ($150-400, instant 2-star heat). Walking away
+  mid-robbery cancels it.
+- **Restaurants**: $40 for a full heal. The Lakehouse Grill stands on stilts over
+  the lake with a walkable deck and parasols; the Canal Cafe hangs over the
+  channel; chowder at the end of the pier; a diner on the beach boulevard.
+- **St. Verde Hospital + Palm Flats Clinic**: walk-in treatment $50 — and WASTED
+  now wakes you up at the nearest hospital.
+- **Police stations** (city HQ + Dusty Palms sheriff): BUSTED releases you out
+  front. Patrol cars parked outside are exactly as stealable as they look.
+- **Station 7**: home of the BLAZE KING — a 260hp-chassis fire truck that shrugs
+  off hits that would total anything else.
+- **Two schools** with schoolyard kids at recess (ambient only — they head home
+  at dusk).
+- **Lake Marina**: a plank dock with two moored skiffs, plus two AI boats
+  cruising the lake all day.
+- Office lobby marker downtown points you at courier work.
+- All services show as lettered icons on the map (P / H / G / $ / R / F / S).
+
+# v9 — "The Range"
 
 **THE CASCADE RANGE**: a wall of snow-capped summits (up to ~270m) along the whole
 northern frontier — boulder fields, alpine roughness, a snowline, and a carved

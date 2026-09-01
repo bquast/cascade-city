@@ -82,6 +82,31 @@ export const FARMS = [
 ];
 export const HEIGHTS = { x0: -700, z0: -420, x1: -980, z1: -760 }; // winding mansion road
 
+// Functional buildings; coordinates static so terrain/hud can use them freely.
+export const SERVICE_POINTS = [
+  { type: 'police',   name: 'Cascade PD HQ',        x: 700,  z: 900 },
+  { type: 'police',   name: 'Dusty Palms Sheriff',  x: 820,  z: -940 },
+  { type: 'hospital', name: 'St. Verde Hospital',   x: 140,  z: 1180 },
+  { type: 'hospital', name: 'Palm Flats Clinic',    x: -280, z: 1010 },
+  { type: 'fire',     name: 'Station 7',            x: 500,  z: 1332 },
+  { type: 'school',   name: 'Cascade Elementary',   x: 240,  z: 760 },
+  { type: 'school',   name: 'Palm Flats School',    x: -380, z: 768 },
+  { type: 'gas',      name: "Ron's Gas & Spray",    x: 452,  z: 150 },
+  { type: 'gas',      name: 'Globe Oil',            x: -418, z: 350 },
+  { type: 'gas',      name: 'Last Chance Fuel',     x: 725,  z: -1078 },
+  { type: 'store',    name: '24-7 Cascade',         x: 148,  z: 1000 },
+  { type: 'store',    name: 'Palm Mart',            x: -288, z: 950 },
+  { type: 'store',    name: 'Dusty Goods',          x: 822,  z: -1000 },
+  { type: 'store',    name: 'Hickory General',      x: -692, z: -180 },
+  { type: 'store',    name: 'Boardwalk Snacks',     x: 560,  z: 1384 },
+  { type: 'eat',      name: 'The Lakehouse Grill',  x: -350, z: -700, deck: 'lake' },
+  { type: 'eat',      name: 'Canal Cafe',           x: -30,  z: 700,  deck: 'channel' },
+  { type: 'eat',      name: 'Pier Chowder Co.',     x: 420,  z: 1700, noBuilding: true },
+  { type: 'eat',      name: 'Sunset Diner',         x: 700,  z: 1384 },
+  { type: 'office',   name: 'Meridian Tower Lobby', x: 455,  z: 1085 },
+  { type: 'marina',   name: 'Lake Marina',          x: -160, z: -905 },
+];
+
 export const CHARACTERS = [
   { name: 'MARCUS', shirt: 0x2e4a6e, pants: 0x2e2e38, skin: 0xc9a184, hat: false, x: 430, z: 1000 },
   { name: 'FELIX',  shirt: 0x3a6b45, pants: 0x3a3a44, skin: 0x8a5a3e, hat: false, x: -450, z: 990 },

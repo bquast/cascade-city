@@ -20,6 +20,7 @@ export const SPECIALS = {
   combine: { name: 'Reaper',  kind: 'combine', accel: 8,  top: 12, turn: 1.6, colors: [0xb03a2a, 0x3a7a3a] },
   boat:    { name: 'Skiff',   kind: 'boat',    accel: 18, top: 30, turn: 1.7, colors: [0xe8e4da, 0x3a6b8a] },
   plane:   { name: 'Duster',  kind: 'plane',   accel: 15, top: 55, turn: 1.7, colors: [0xd9a520, 0xb03a2a] },
+  firetruck: { name: 'Blaze King', kind: 'firetruck', accel: 14, top: 26, turn: 1.6, colors: [0xb01f1a], hp: 260 },
 };
 
 const HEADLIGHT_MATS = [];
@@ -114,6 +115,39 @@ function bigWheel(r, w) {
   hub.scale.setScalar(r / 0.42);
   m.add(hub);
   return m;
+}
+
+function makeFiretruckMesh(colorHex) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
+  const body = chamfer(2.5, 1.7, 7.2, bodyMat, 0.16);
+  body.position.y = 1.45;
+  const cabG = chamfer(2.4, 1.1, 1.8, bodyMat, 0.14);
+  cabG.position.set(0, 2.55, -2.4);
+  const glass = chamfer(2.2, 0.8, 1.5, new THREE.MeshLambertMaterial({ color: 0x22303a }), 0.1);
+  glass.position.set(0, 2.6, -2.4);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 3.6, 12), new THREE.MeshLambertMaterial({ color: 0xd8d8dc }));
+  tank.rotation.x = Math.PI / 2;
+  tank.position.set(0, 2.6, 0.9);
+  const ladder = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 4.4), new THREE.MeshLambertMaterial({ color: 0xc9c9cf }));
+  ladder.position.set(0.8, 3.3, 0.9);
+  ladder.rotation.x = -0.06;
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.24, 0.4), new THREE.MeshBasicMaterial({ color: 0xc22a22 }));
+  bar.position.set(0, 3.25, -2.4);
+  g.add(body, cabG, glass, tank, ladder, bar);
+  const wheels = [];
+  for (const [x, z] of [[-1.15, -2.3], [1.15, -2.3], [-1.15, 1.2], [1.15, 1.2], [-1.15, 2.6], [1.15, 2.6]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 0.55, z);
+    const w = bigWheel(0.55, 0.42);
+    pivot.add(w);
+    g.add(pivot);
+    wheels.push({ pivot, wheel: w, front: z < 0 });
+  }
+  g.userData.brakeMat = new THREE.MeshBasicMaterial({ color: 0x3a0d0d });
+  g.userData.wheels = wheels;
+  g.userData.halfL = 3.6;
+  return g;
 }
 
 function makeTractorMesh(colorHex) {
@@ -238,6 +272,7 @@ export function makeCarMesh(spec, colorHex) {
   if (spec.kind === 'combine') return makeCombineMesh(colorHex);
   if (spec.kind === 'boat') return makeBoatMesh(colorHex);
   if (spec.kind === 'plane') return makePlaneMesh(colorHex);
+  if (spec.kind === 'firetruck') return makeFiretruckMesh(colorHex);
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
   const glassMat = new THREE.MeshLambertMaterial({ color: 0x22303a });
@@ -383,7 +418,7 @@ export class Car {
     this.heading = heading;
     this.vel = new THREE.Vector2(0, 0); // x,z world velocity
     this.radius = spec.kind === 'bike' ? 0.8 : 1.9;
-    this.hp = 100;
+    this.hp = spec.hp || 100;
     this.dead = false;
     this.vy = 0;
     this.airborne = false;

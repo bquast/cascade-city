@@ -1,4 +1,5 @@
-import { PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementOrigin, settlementExtent, SIGN, PIER, OCEAN, AIRPORTS, FARMS } from './config.js';
+import { PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementOrigin, settlementExtent, SIGN, PIER, OCEAN, AIRPORTS, FARMS, SERVICE_POINTS } from './config.js';
+
 import { groundY, WATER_Y, channelCut, desertF } from './terrain.js';
 
 const VIEW = 460; // world units shown across the minimap
@@ -107,6 +108,19 @@ export class Hud {
     for (const A of AIRPORTS) if (!A.dirt) c.fillText('CASCADE INTL', w2b(A.x) + 4, w2b(A.z));
     c.fillStyle = '#c9a83a';
     for (const F of FARMS) c.fillRect(w2b(F.x) - 2, w2b(F.z) - 2, 4, 4);
+    // service icons
+    const ICON = { police: ['#2a4adf', 'P'], hospital: ['#c22a22', 'H'], gas: ['#d85a2a', 'G'], store: ['#2a8a4a', '$'], eat: ['#d8a02a', 'R'], fire: ['#b01f1a', 'F'], school: ['#4aa8c9', 'S'] };
+    c.font = 'bold 7px sans-serif';
+    c.textAlign = 'center';
+    for (const S of SERVICE_POINTS) {
+      const ic = ICON[S.type];
+      if (!ic) continue;
+      c.fillStyle = ic[0];
+      c.fillRect(w2b(S.x) - 4, w2b(S.z) - 4, 8, 8);
+      c.fillStyle = '#fff';
+      c.fillText(ic[1], w2b(S.x), w2b(S.z) + 2.5);
+    }
+    c.textAlign = 'left';
   }
 
   setMission(label, timer, tx, tz) {

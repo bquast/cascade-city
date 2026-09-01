@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementExtent, settlementOrigin, OCEAN, MOUNTAIN, DESERT, VINEYARD, PIER, AIRPORTS, FARMS, HEIGHTS, RANGE } from './config.js';
+import { WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementExtent, settlementOrigin, OCEAN, MOUNTAIN, DESERT, VINEYARD, PIER, AIRPORTS, FARMS, HEIGHTS, RANGE, SERVICE_POINTS } from './config.js';
 
 // ---- Deterministic value noise ----
 function hash2(x, y) {
@@ -43,6 +43,10 @@ for (const A of AIRPORTS) {
 }
 for (const F of FARMS) {
   S_RECTS.push({ amp: 0.14, minX: F.x - 110, maxX: F.x + 110, minZ: F.z - 90, maxZ: F.z + 90 });
+}
+for (const S of SERVICE_POINTS) {
+  if (S.type === 'marina' || S.noBuilding) continue;
+  S_RECTS.push({ amp: 0.1, minX: S.x - 16, maxX: S.x + 16, minZ: S.z - 14, maxZ: S.z + 20 });
 }
 // the winding Heights road: approximate its curve with short flat segments
 export const HEIGHTS_PTS = [];

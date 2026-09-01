@@ -19,7 +19,7 @@
   <div id="toast"></div>
   <div id="cash">$0</div>
     <div id="mission" style="display:none"></div>
-    <div id="stars">☆☆☆</div>
+    <div id="stars">☆☆☆☆☆</div>
   <div id="health"><div id="health-fill"></div></div>
   <div id="weapon">Pistol</div>
   <div id="crosshair"></div>
@@ -29,20 +29,31 @@
 <div id="start">
   <div class="panel">
     <h1>Cascade City</h1>
-    <p class="tag">A very small open world. One driver. Questionable morals optional.</p>
+    <p class="tag">One city. Three decades. Three lives. Questionable morals optional.</p>
+    <div id="era-row">
+      <a class="era" data-era="1935" href="?era=1935">1935<span>GOLDEN AGE</span></a>
+      <a class="era" data-era="1948" href="?era=1948">1948<span>CITY OF ANGELS</span></a>
+      <a class="era" data-era="1994" href="?era=1994">1994<span>WEST COAST</span></a>
+    </div>
     <ul class="controls">
       <li><b>W A S D</b> walk / drive</li>
-      <li><b>Shift</b> sprint</li>
+      <li><b>Q</b> switch character</li>
       <li><b>E</b> enter / exit vehicle</li>
-      <li><b>Space</b> handbrake</li>
-      <li><b>H</b> horn</li>
-      <li><b>Mouse</b> look &amp; shoot</li>
-      <li><b>1 2 3</b> fists / pistol / SMG</li>
+      <li><b>T</b> missions &nbsp; <b>R</b> radio &nbsp; <b>H</b> horn</li>
+      <li><b>Space</b> handbrake / dive (plane)</li>
+      <li><b>Mouse</b> look &amp; shoot &nbsp; <b>1 2 3</b> weapons</li>
+      <li class="sub">Planes at the airstrips: hold <b>W</b> to lift off. Boats at the pier.</li>
     </ul>
     <button id="play">Start</button>
   </div>
 </div>
 
 <script type="module" src="./main.js"></script>
+<script>
+  const era = new URLSearchParams(location.search).get('era') || '1994';
+  document.querySelectorAll('.era').forEach((el) => {
+    if (el.dataset.era === era) el.classList.add('era-on');
+  });
+</script>
 </body>
 </html>

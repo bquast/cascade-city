@@ -35,6 +35,7 @@ export class Hud {
         if (channelCut(x, z) > 0.4) c.fillStyle = '#7d7d7b';
         else if (Math.hypot(x - GOLF.x, z - GOLF.z) < GOLF.r) c.fillStyle = '#4f8a3e';
         else if (y < WATER_Y + 0.5) c.fillStyle = '#3f6d7a';
+        else if (y > 115) c.fillStyle = '#dde2e8';
         else if (y > 60) c.fillStyle = '#9a938c';
         else if (y > 30) c.fillStyle = '#8a8078';
         else {
@@ -85,6 +86,7 @@ export class Hud {
     for (const s of SETTLEMENTS) c.fillText(s.name.toUpperCase(), w2b(s.cx), w2b(s.cz - settlementExtent(s) / 2 - 14));
     c.fillText('GOLF CLUB', w2b(GOLF.x), w2b(GOLF.z - GOLF.r - 10));
     c.fillText('MT. CASCADE', w2b(-1150), w2b(-1150));
+    c.fillText('THE CASCADE RANGE', w2b(-200), w2b(-1720));
     c.save();
     c.fillStyle = '#f2efe6';
     c.font = 'bold 8px sans-serif';

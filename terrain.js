@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementExtent, settlementOrigin, OCEAN, MOUNTAIN, DESERT, VINEYARD, PIER, AIRPORTS, FARMS, HEIGHTS } from './config.js';
+import { WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementExtent, settlementOrigin, OCEAN, MOUNTAIN, DESERT, VINEYARD, PIER, AIRPORTS, FARMS, HEIGHTS, RANGE } from './config.js';
 
 // ---- Deterministic value noise ----
 function hash2(x, y) {
@@ -128,6 +128,22 @@ export function terrainBaseY(x, z) {
   // Mount Cascade
   const dm = Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z);
   h += MOUNTAIN.h * Math.exp(-(dm * dm) / (MOUNTAIN.r * MOUNTAIN.r * 0.32));
+  // The Cascade Range: a chain of summits walling the northern frontier
+  if (z < -1150) {
+    const t = clamp01((x - RANGE.x0) / (RANGE.x1 - RANGE.x0));
+    const spineZ = RANGE.z + Math.sin(t * 9.2) * 90;
+    const dz = z - spineZ;
+    const along = Math.sin(t * Math.PI * 5.2 + 1.86) * 0.5 + 0.5; // summits and saddles
+    const edgeF = sm(clamp01(t * 5)) * sm(clamp01((1 - t) * 5));
+    let ridge = (85 + along * 160) * edgeF * Math.exp(-(dz * dz) / (RANGE.width * RANGE.width * 0.5));
+    // the pass: a carved cut where the road climbs to the viewpoint
+    if (x > 60 && x < 340 && z < -1380) {
+      const d = Math.abs(x - 200);
+      ridge *= 0.52 + 0.48 * sm(clamp01((d - 30) / 70));
+    }
+    h += ridge;
+    if (ridge > 30) h += ridge * 0.22 * (noise2(x / 46 + 9.1, z / 46 + 4.4) - 0.5); // alpine roughness
+  }
   // the lake basin
   const dl = Math.hypot(x - LAKE.x, z - LAKE.z);
   h -= 14 * Math.exp(-(dl * dl) / (LAKE.r * LAKE.r * 0.9));
@@ -177,6 +193,7 @@ export function buildTerrain(scene) {
   const cSand = new THREE.Color(0x9a8f6a);
   const cGreen = new THREE.Color(0x5a9448);
   const cDesert = new THREE.Color(0xb09a68);
+  const cSnow = new THREE.Color(0xe8ecf2);
   const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), zc = pos.getZ(i);
@@ -187,6 +204,7 @@ export function buildTerrain(scene) {
     if (cut > 0.3) tmp.setHex(0x8a8a88); // concrete channel
     else if (dg < GOLF.r) tmp.lerpColors(cGreen, cGrass, sm(clamp01((dg - GOLF.r * 0.75) / (GOLF.r * 0.25))));
     else if (y < WATER_Y + 1.5) tmp.copy(cSand);
+    else if (y > 115) tmp.lerpColors(cRock, cSnow, clamp01((y - 115) / 45));
     else if (y > 40) tmp.lerpColors(cDry, cRock, clamp01((y - 40) / 60));
     else {
       tmp.lerpColors(cGrass, cDry, clamp01(y / 16));
@@ -266,6 +284,8 @@ export function buildTerrain(scene) {
   const leafM = new THREE.InstancedMesh(leafGeo, new THREE.MeshLambertMaterial({ color: 0x557a3e }), leafs.length);
   pineM.castShadow = leafM.castShadow = true;
   const m4 = new THREE.Matrix4();
+const _q2 = new THREE.Quaternion();
+const UPV = new THREE.Vector3(0, 1, 0);
   const q = new THREE.Quaternion();
   let ti = 0;
   const place = (mesh, idx, t) => {
@@ -325,6 +345,28 @@ export function buildTerrain(scene) {
     addCollider(t.x, t.z, 0.42 * t.s);
   });
   scene.add(cacti);
+
+  // boulder fields on the range
+  const boulders = [];
+  let bt = 0;
+  while (boulders.length < 160 && bt < 20000) {
+    bt++;
+    const x = RANGE.x0 + hash2(bt, 19) * (RANGE.x1 - RANGE.x0);
+    const z = -1250 - hash2(bt, 57) * 650;
+    const y = groundY(x, z);
+    if (y < 45 || y > 200) continue;
+    boulders.push({ x, z, y, s: 0.8 + hash2(bt, 91) * 2.2 });
+  }
+  const bldGeo = new THREE.IcosahedronGeometry(1, 0);
+  const bldMesh = new THREE.InstancedMesh(bldGeo, new THREE.MeshLambertMaterial({ color: 0x7a7672 }), boulders.length);
+  bldMesh.castShadow = true;
+  boulders.forEach((b, i) => {
+    _q2.setFromAxisAngle(UPV, hash2(i, 3) * 6.28);
+    m4.compose(new THREE.Vector3(b.x, b.y + b.s * 0.3, b.z), _q2, new THREE.Vector3(b.s, b.s * 0.75, b.s));
+    bldMesh.setMatrixAt(i, m4);
+    if (b.s > 1.6) addCollider(b.x, b.z, b.s * 0.8);
+  });
+  scene.add(bldMesh);
 
   // ---- vineyard rows ----
   const vineRows = [];

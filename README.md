@@ -1,4 +1,14 @@
-# Cascade City v8 — "Eras"
+# Cascade City v9 — "The Range"
+
+**THE CASCADE RANGE**: a wall of snow-capped summits (up to ~270m) along the whole
+northern frontier — boulder fields, alpine roughness, a snowline, and a carved
+mountain pass road climbing from the Dusty Palms highway to a saddle viewpoint
+(health pickup, hidden packages, and a stunt ramp launching off the back of the
+ridge). Country traffic drives the pass. Planes now fly to 320m — high enough to
+clear the peaks — with altitude-aware collision: treetops can't grab you at
+cruising height, but flying into a mountainside ends how you'd expect.
+
+# v8 — "Eras"
 
 ## Pick your decade (start screen)
 - **1935 — THE GOLDEN AGE**: sepia streets, tall boxy motorcars with running boards,

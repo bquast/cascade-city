@@ -40,6 +40,7 @@ export class Pickups {
     fixed.push({ type: 'smg', x: SETTLEMENTS[4].cx - 30, z: SETTLEMENTS[4].cz }); // Dusty Palms
     fixed.push({ type: 'health', x: GOLF.x + 20, z: GOLF.z });
     fixed.push({ type: 'health', x: MOUNTAIN.x, z: MOUNTAIN.z + 24 }); // summit aid
+    fixed.push({ type: 'health', x: 200, z: -1660 });                   // pass viewpoint
     for (const f of fixed) this.add(f.type, f.x, f.z, { respawns: true });
 
     // hidden packages: curated candidate pool, seeded pick
@@ -56,6 +57,8 @@ export class Pickups {
     cands.push({ x: GOLF.x - GOLF.r + 20, z: GOLF.z }, { x: GOLF.x, z: GOLF.z + GOLF.r - 20 });
     cands.push({ x: PIER.x, z: PIER.z1 - 4 });                       // end of the pier
     cands.push({ x: MOUNTAIN.x, z: MOUNTAIN.z });                    // the summit
+    cands.push({ x: 200, z: -1700 });                                 // the pass
+    cands.push({ x: -900, z: -1680 });                                // west peaks
     cands.push({ x: SIGN.x, z: SIGN.z - 6 });                        // behind the sign
     cands.push({ x: VINEYARD.x, z: VINEYARD.z });
     cands.push({ x: WINDFARM.x, z: WINDFARM.z });

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WATER_Y as WATER_LEVEL } from './terrain.js';
+import { WORLD_HALF } from './config.js';
 import { getEra } from './era.js';
 const ERA = getEra();
 
@@ -524,13 +525,33 @@ export class Car {
     const f = this.forward();
     const nx = this.pos.x + f.x * speed * dt;
     const nz = this.pos.z + f.y * speed * dt;
-    const solved = world.resolve(nx, nz, 1.6, hit);
-    if (hit && (hit.building || hit.wall || hit.tree)) {
-      this.vel.multiplyScalar(0.1);
-      speed *= 0.1;
-      this.hp -= Math.max(0, speed * 2 + 15);
+    const aglNow = this.pos.y - world.groundY(this.pos.x, this.pos.z, this.pos.y);
+    let solved;
+    if (!this.flying || aglNow < 10) {
+      // near the ground: normal 2D collision (trees, walls, buildings)
+      solved = world.resolve(nx, nz, 1.6, hit);
+      if (hit && (hit.building || hit.wall || hit.tree) && speed > 6) {
+        this.vel.multiplyScalar(0.1);
+        speed *= 0.1;
+        this.hp -= speed * 2 + 15;
+      }
+    } else {
+      // airborne: only the world edge and the terrain itself can stop you
+      solved = {
+        x: Math.max(-WORLD_HALF + 5, Math.min(WORLD_HALF - 5, nx)),
+        z: Math.max(-WORLD_HALF + 5, Math.min(WORLD_HALF - 5, nz)),
+      };
     }
     const gy = world.groundY(solved.x, solved.z, this.pos.y);
+    // flying into a mountainside is not landing
+    if (this.flying && gy > this.pos.y + 0.6) {
+      this.pos.set(solved.x, gy, solved.z);
+      this.flying = false;
+      this.vy = 0;
+      this.hp -= speed * 2.5;
+      this.vel.multiplyScalar(0.05);
+      speed *= 0.05;
+    }
 
     if (!this.flying) {
       this.pos.set(solved.x, gy, solved.z);
@@ -540,7 +561,7 @@ export class Car {
       const wantVy = brake ? -11 : throttle > 0 ? (speed > 20 ? 6 : -4) : -3.5;
       this.vy += (wantVy - this.vy) * Math.min(1, dt * 2.2);
       let y = this.pos.y + this.vy * dt;
-      if (y > 140) { y = 140; this.vy = Math.min(0, this.vy); }
+      if (y > 320) { y = 320; this.vy = Math.min(0, this.vy); }
       if (this.vy < 0 && y <= gy + 0.25) {
         y = gy;
         if (this.vy < -13) { this.hp -= 40; if (hit) hit.landed = true; }

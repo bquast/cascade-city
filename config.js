@@ -21,6 +21,7 @@ export const LAKE = { x: -350, z: -950, r: 220 };
 export const OCEAN = { shoreZ: 1500 };                      // everything south of this drops into the sea
 export const MOUNTAIN = { x: -1150, z: -1150, r: 620, h: 150 };  // Mount Cascade
 export const DESERT = { x: 950, z: -1000, r: 900 };
+export const RANGE = { z: -1700, x0: -1700, x1: 1700, width: 260 }; // the Cascade Range
 export const VINEYARD = { x: 600, z: -350, w: 320, d: 220 };
 export const WINDFARM = { x: 150, z: -650, r: 260, count: 9 };
 export const SIGN = { x: -790, z: -760, rotY: 2.5 };        // CASCADE letters on the foothill
@@ -44,6 +45,9 @@ export const CONNECTORS = [
   { x0: -780, z0: -180,  x1: -780, z1: -500 },   // mountain approach
   { x0: -780, z0: -500,  x1: -1150, z1: -500 },  // switchback leg 1
   { x0: -1150, z0: -500, x1: -1150, z1: -1150 }, // switchback leg 2 -> summit
+  { x0: 420,  z0: -1050, x1: 420,  z1: -1420 },  // north toward the range
+  { x0: 420,  z0: -1420, x1: 200,  z1: -1420 },  // along the foothills
+  { x0: 200,  z0: -1420, x1: 200,  z1: -1680 },  // the pass climb to the viewpoint
 ];
 
 export const OVERPASS = { z: 950, x0: -140, x1: 20, h: 6.5, w: 14, rampL: 46 };
@@ -54,6 +58,7 @@ export const RAMPS = [
   { x: -560, z: -950,  dir: '+x', L: 17, W: 10, H: 5.5 },   // lake jump
   { x: 950,  z: -900,  dir: '-z', L: 15, W: 9,  H: 4.5 },   // desert
   { x: -1060, z: -1150, dir: '+x', L: 18, W: 10, H: 6 },    // LAUNCH OFF MOUNT CASCADE
+  { x: 200,   z: -1700, dir: '-z', L: 18, W: 10, H: 6.5 },  // off the back of the range
 ];
 
 export const TRAFFIC_CARS = 56;

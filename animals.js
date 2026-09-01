@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ANIMALS, GOLF, LAKE, SETTLEMENTS, WORLD_HALF } from './config.js';
+import { ANIMALS, GOLF, LAKE, SETTLEMENTS, WORLD_HALF, FARMS } from './config.js';
 import { forest } from './terrain.js';
 
 const rand = Math.random;
@@ -10,7 +10,10 @@ const SPECIES = {
   coyote: { scale: 0.7,  colors: [0x8a8078],                     speed: 8, flee: true,  home: 'wild' },
   stag:   { scale: 1.05, colors: [0x8a6a4a, 0x7a5a3a],           speed: 11, flee: true, home: 'wild', antlers: true },
   bear:   { scale: 1.6,  colors: [0x4a3628],                     speed: 6.5, flee: false, home: 'wild', aggro: true },
+  horse:  { scale: 1.35, colors: [0x6a4a32, 0x8a6a48, 0x3a2e26], speed: 10, flee: false, home: 'ranch', rider: true },
+  cattle: { scale: 1.2,  colors: [0xe8e2d6, 0x4a3a30, 0x9a6a4a], speed: 4,  flee: true,  home: 'ranch' },
 };
+const RANCHES = FARMS.filter((f) => f.ranch).concat([FARMS[1]]);
 
 const _M = new THREE.Matrix4();
 const _L = new THREE.Matrix4();
@@ -39,6 +42,10 @@ export class Animals {
     this.legFL = mk(geoLeg); this.legFR = mk(geoLeg);
     this.legBL = mk(geoLeg); this.legBR = mk(geoLeg);
     this.ant = mk(geoAnt);
+    // cowboy rider parts (scale 0 on everything that isn't a horse)
+    this.rTorso = mk(new THREE.BoxGeometry(0.5, 0.6, 0.3));
+    this.rHead = mk(new THREE.SphereGeometry(0.16, 8, 6));
+    this.rHat = mk(new THREE.CylinderGeometry(0.28, 0.42, 0.12, 8));
     this.body.castShadow = true;
 
     this.list = [];
@@ -50,8 +57,10 @@ export class Animals {
         const c = sp.colors[(rand() * sp.colors.length) | 0];
         for (const m of [this.body, this.head, this.legFL, this.legFR, this.legBL, this.legBR]) m.setColorAt(n, col.setHex(c));
         this.ant.setColorAt(n, col.setHex(0x5a4630));
+        if (name === 'horse') { this.rTorso.setColorAt(n, col.setHex(0x5a4a6a)); this.rHead.setColorAt(n, col.setHex(0xc9a184)); this.rHat.setColorAt(n, col.setHex(0x4a3a2a)); }
         const a = {
           idx: n++, species: name, sp,
+          ranch: RANCHES[(rand() * RANCHES.length) | 0],
           pos: new THREE.Vector3(), heading: rand() * 6.28,
           mode: 'wander', t: 0, phase: rand() * 6, swing: 0,
           tx: 0, tz: 0, pause: rand() * 2,
@@ -66,7 +75,10 @@ export class Animals {
   placeHome(a, initial) {
     for (let tries = 0; tries < 60; tries++) {
       let x, z;
-      if (a.sp.home === 'hamlet') {
+      if (a.sp.home === 'ranch') {
+        x = a.ranch.x + (rand() - 0.5) * 90;
+        z = a.ranch.z + (rand() - 0.5) * 80;
+      } else if (a.sp.home === 'hamlet') {
         x = HICKORY.cx + (rand() - 0.5) * 220;
         z = HICKORY.cz + (rand() - 0.5) * 220;
       } else {
@@ -75,7 +87,7 @@ export class Animals {
         if (a.species !== 'coyote' && forest(x, z) < 0.45) continue; // stags & bears prefer woods
       }
       let ok = Math.hypot(x - GOLF.x, z - GOLF.z) > GOLF.r + 30 && Math.hypot(x - LAKE.x, z - LAKE.z) > LAKE.r + 20;
-      if (a.sp.home !== 'hamlet') {
+      if (a.sp.home !== 'hamlet' && a.sp.home !== 'ranch') {
         for (const s of SETTLEMENTS) if (Math.hypot(x - s.cx, z - s.cz) < 320) { ok = false; break; }
       }
       if (!ok) continue;
@@ -148,6 +160,12 @@ export class Animals {
   }
 
   newTarget(a) {
+    if (a.sp.home === 'ranch') {
+      a.tx = a.ranch.x + (rand() - 0.5) * (a.sp.rider ? 130 : 80);
+      a.tz = a.ranch.z + (rand() - 0.5) * (a.sp.rider ? 120 : 70);
+      a.pause = a.sp.rider ? 0.4 : 1 + rand() * 4;
+      return;
+    }
     a.tx = a.pos.x + (rand() - 0.5) * 90;
     a.tz = a.pos.z + (rand() - 0.5) * 90;
     const lim = WORLD_HALF - 30;
@@ -186,8 +204,21 @@ export class Animals {
       _L.setPosition(0, 1.12, -0.72);
       _P.multiplyMatrices(_M, _L);
       this.ant.setMatrixAt(a.idx, _P);
+      const rs = a.sp.rider && !down ? 0.9 : 0.0001;
+      _L.makeScale(rs, rs, rs);
+      _L.setPosition(0, 1.2, 0.05);
+      _P.multiplyMatrices(_M, _L);
+      this.rTorso.setMatrixAt(a.idx, _P);
+      _L.makeScale(rs, rs, rs);
+      _L.setPosition(0, 1.62, 0.05);
+      _P.multiplyMatrices(_M, _L);
+      this.rHead.setMatrixAt(a.idx, _P);
+      _L.makeScale(rs * 1.35, rs, rs * 1.35);
+      _L.setPosition(0, 1.76, 0.05);
+      _P.multiplyMatrices(_M, _L);
+      this.rHat.setMatrixAt(a.idx, _P);
     }
-    for (const m of [this.body, this.head, this.legFL, this.legFR, this.legBL, this.legBR, this.ant]) {
+    for (const m of [this.body, this.head, this.legFL, this.legFR, this.legBL, this.legBR, this.ant, this.rTorso, this.rHead, this.rHat]) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }

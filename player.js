@@ -10,12 +10,12 @@ export function makePedMesh(shirt = 0x35597a, pants = 0x3a3a44, skin = 0xc9a184)
   };
   g.userData.mats = mats;
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.72, 0.34), mat(shirt, 'shirt'));
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.72, 0.34), mat(shirt, 'shirt'));
   torso.position.y = 1.12;
   torso.castShadow = true;
   g.add(torso);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.36, 0.34), mat(skin, 'skin'));
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 12, 9), mat(skin, 'skin'));
   const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.16, 8), mat(0xc9b26a));
   hat.position.y = 1.98;
   hat.visible = false;
@@ -27,7 +27,7 @@ export function makePedMesh(shirt = 0x35597a, pants = 0x3a3a44, skin = 0xc9a184)
 
   const legs = [];
   for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.76, 0.24), mat(pants, 'pants'));
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.115, 0.76, 9), mat(pants, 'pants'));
     leg.geometry.translate(0, -0.38, 0);
     leg.position.set(s * 0.16, 0.76, 0);
     leg.castShadow = true;
@@ -36,7 +36,7 @@ export function makePedMesh(shirt = 0x35597a, pants = 0x3a3a44, skin = 0xc9a184)
   }
   const arms = [];
   for (const s of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.64, 0.2), mat(shirt, 'shirt'));
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.64, 9), mat(shirt, 'shirt'));
     arm.geometry.translate(0, -0.28, 0);
     arm.position.set(s * 0.42, 1.44, 0);
     arm.castShadow = true;

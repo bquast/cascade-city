@@ -1,4 +1,4 @@
-import { PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementOrigin, settlementExtent, SIGN, PIER, OCEAN } from './config.js';
+import { PITCH, ROAD_W, BLOCK_W, WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementOrigin, settlementExtent, SIGN, PIER, OCEAN, AIRPORTS, FARMS } from './config.js';
 import { groundY, WATER_Y, channelCut, desertF } from './terrain.js';
 
 const VIEW = 460; // world units shown across the minimap
@@ -93,6 +93,18 @@ export class Hud {
     // pier
     c.fillStyle = '#7a6a52';
     c.fillRect(w2b(PIER.x - PIER.w / 2), w2b(PIER.z0), PIER.w * this.baseScale, (PIER.z1 - PIER.z0) * this.baseScale);
+    // airports
+    for (const A of AIRPORTS) {
+      c.fillStyle = A.dirt ? '#8a7a5c' : '#4a4844';
+      const hl = A.len / 2 * this.baseScale, hw = Math.max(2, A.w / 2 * this.baseScale);
+      if (A.axis === 'z') c.fillRect(w2b(A.x) - hw, w2b(A.z) - hl, hw * 2, hl * 2);
+      else c.fillRect(w2b(A.x) - hl, w2b(A.z) - hw, hl * 2, hw * 2);
+    }
+    c.fillStyle = '#e8e4da';
+    c.font = '7px sans-serif';
+    for (const A of AIRPORTS) if (!A.dirt) c.fillText('CASCADE INTL', w2b(A.x) + 4, w2b(A.z));
+    c.fillStyle = '#c9a83a';
+    for (const F of FARMS) c.fillRect(w2b(F.x) - 2, w2b(F.z) - 2, 4, 4);
   }
 
   setMission(label, timer, tx, tz) {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ROAD_W, BLOCK_W, PITCH, SETTLEMENTS, settlementOrigin, settlementExtent, GOLF } from './config.js';
-import { ribbon } from './terrain.js';
+import { ribbon, curveRibbon, HEIGHTS_PTS } from './terrain.js';
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -31,7 +31,12 @@ function makeRoofGeo() {
   return g;
 }
 
-export function buildCity(scene, world) {
+export const WINDOW_MATS = [];
+export function setWindowsNight(on) {
+  for (const m of WINDOW_MATS) m.color.setHex(on ? 0xffca6a : 0x24303c);
+}
+
+export function buildCity(scene, world, terrain) {
   const rand = mulberry32(20260831);
   const gy = world.groundY;
   const blocks = [];
@@ -40,6 +45,7 @@ export function buildCity(scene, world) {
   const colliders = new Map(); // "sid:i,j" -> AABB list
   const lots = [];
   const parkTrees = [];
+  const towers = []; // for window grids
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const col = new THREE.Color();
@@ -76,7 +82,7 @@ export function buildCity(scene, world) {
         const bx = o.x + i * PITCH + ROAD_W;
         const bz = o.z + j * PITCH + ROAD_W;
         const isPark = s.type !== 'rural' && s.type !== 'industrial' && rand() < 0.08;
-        const isCul = !isPark && s.culdesacs && rand() < 0.4;
+        const isCul = !isPark && s.culdesacs && rand() < 0.62;
         blocks.push({ s, i, j, isPark, district: s.type, isCul });
         if (isPark) { buildPark(bx, bz); continue; }
 
@@ -90,6 +96,7 @@ export function buildCity(scene, world) {
             const cx = bx + 4 + li * lotW + lotW / 2;
             const cz = bz + 4 + lj * lotW + lotW / 2;
             addBoxC(s, i, j, cx, cz, w, h, dep, DOWNTOWN_FACADES[(rand() * DOWNTOWN_FACADES.length) | 0]);
+            towers.push({ cx, cz, w, h, dep, yB: gy(cx, cz) - 0.5 });
             if (h > 30 && rand() < 0.75) {
               boxes.push({ x: cx, z: cz, w: w * 0.35, h: 3 + rand() * 4, dep: dep * 0.35, color: 0x6f6a63, yBase: gy(cx, cz) - 0.5 + h + 0.5, hExtra: 0 });
             }
@@ -167,6 +174,24 @@ export function buildCity(scene, world) {
             const w = 7 + rand() * 3, dep = 7 + rand() * 2, h = 3.5 + rand() * 2;
             addBoxC(s, i, j, hx, hz, w, h, dep, HOUSE_WALLS[(rand() * HOUSE_WALLS.length) | 0]);
             roofs.push({ x: hx, z: hz, w: w + 0.8, h: 2 + rand(), dep: dep + 0.8, color: ROOFS[(rand() * ROOFS.length) | 0], yBase: gy(hx, hz) + h, rot: rand() < 0.5 ? 0 : Math.PI / 2 });
+          }
+        } else if (s.type === 'residential' && rand() < 0.35) {
+          // crescent: a curved lane sweeping through the block, houses along it
+          const pts = [];
+          const cxm = bx + BLOCK_W / 2;
+          for (let k = 0; k <= 8; k++) {
+            const t = k / 8;
+            pts.push({ x: cxm + Math.sin(t * Math.PI) * (BLOCK_W / 2 - 8) * (rand() < 0.5 || true ? 1 : -1) * (i % 2 ? 1 : -1), z: bz - 2 + t * (BLOCK_W + 4) });
+          }
+          curveRibbon(scene, gy, pts, 8, 0x45423e, 0.08);
+          for (let k = 1; k < 8; k += 2) {
+            const p = pts[k];
+            const side = i % 2 ? -1 : 1;
+            const hx = p.x + side * 11, hz = p.z;
+            if (hx < bx + 4 || hx > bx + BLOCK_W - 4) continue;
+            const w = 7 + rand() * 2.5, dep = 7 + rand() * 2, hgt = 3.5 + rand() * 2;
+            addBoxC(s, i, j, hx, hz, w, hgt, dep, HOUSE_WALLS[(rand() * HOUSE_WALLS.length) | 0]);
+            roofs.push({ x: hx, z: hz, w: w + 0.8, h: 2 + rand(), dep: dep + 0.8, color: ROOFS[(rand() * ROOFS.length) | 0], yBase: gy(hx, hz) + hgt, rot: rand() < 0.5 ? 0 : Math.PI / 2 });
           }
         } else {
           // regular residential 3x3
@@ -315,6 +340,63 @@ export function buildCity(scene, world) {
       if (x > box.minX && x < box.maxX && z > box.minZ && z < box.maxZ) return true;
     }
     return false;
+  }
+
+  // ---- downtown window grids (one draw call, glow at night) ----
+  {
+    const wins = [];
+    for (const T of towers) {
+      const floors = Math.min(26, Math.floor(T.h / 3.4));
+      for (const [nx, nz, face] of [[0, -1, 0], [0, 1, Math.PI], [-1, 0, Math.PI / 2], [1, 0, -Math.PI / 2]]) {
+        const faceW = nx === 0 ? T.w : T.dep;
+        const cols = Math.max(2, Math.floor(faceW / 2.6));
+        for (let f = 1; f < floors; f++) {
+          for (let cI = 0; cI < cols; cI++) {
+            if ((f + cI) % 3 === 0) continue; // variety
+            const off = (cI - (cols - 1) / 2) * (faceW / cols);
+            wins.push({
+              x: T.cx + nx * (T.w / 2 + 0.05) + (nz !== 0 ? off : 0),
+              z: T.cz + nz * (T.dep / 2 + 0.05) + (nx !== 0 ? off : 0),
+              y: T.yB + f * 3.4,
+              ry: face,
+            });
+          }
+        }
+      }
+    }
+    const winGeo = new THREE.PlaneGeometry(1.4, 1.9);
+    const winMat = new THREE.MeshBasicMaterial({ color: 0x24303c, side: THREE.DoubleSide });
+    WINDOW_MATS.push(winMat);
+    const winMesh = new THREE.InstancedMesh(winGeo, winMat, wins.length);
+    const wq = new THREE.Quaternion();
+    wins.forEach((wn, idx) => {
+      wq.setFromAxisAngle(up, wn.ry);
+      m4.compose(new THREE.Vector3(wn.x, wn.y, wn.z), wq, new THREE.Vector3(1, 1, 1));
+      winMesh.setMatrixAt(idx, m4);
+    });
+    scene.add(winMesh);
+  }
+
+  // ---- Cascade Heights: winding mansion road on the foothill ----
+  {
+    curveRibbon(scene, gy, HEIGHTS_PTS, 11, 0x4a4742, 0.07);
+    for (let i = 1; i < HEIGHTS_PTS.length - 1; i += 2) {
+      const p = HEIGHTS_PTS[i], pn = HEIGHTS_PTS[i + 1];
+      const dx = pn.x - p.x, dz = pn.z - p.z;
+      const L = Math.hypot(dx, dz) || 1;
+      const side = i % 4 < 2 ? 1 : -1;
+      const mx = p.x + (-dz / L) * 22 * side;
+      const mz = p.z + (dx / L) * 22 * side;
+      const my = gy(mx, mz);
+      const w = 13 + rand() * 4, dep = 10 + rand() * 3, h = 5.5 + rand() * 2;
+      boxes.push({ x: mx, z: mz, w, h, dep, color: 0xd8d0c0, yBase: my - 0.8, hExtra: 0.8 });
+      roofs.push({ x: mx, z: mz, w: w + 1, h: 2.2, dep: dep + 1, color: 0x6a5a4a, yBase: my + h, rot: 0 });
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(4, 14), new THREE.MeshLambertMaterial({ color: 0x4fa8c9 }));
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(mx + 12, my + 0.06, mz + 3);
+      scene.add(pool);
+      if (terrain) terrain.addCollider(mx, mz, Math.max(w, dep) / 2 + 0.4);
+    }
   }
 
   return { resolve, blocks, buildingLots: lots, blockedAt };

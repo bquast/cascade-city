@@ -59,9 +59,23 @@ export const RAMPS = [
 export const TRAFFIC_CARS = 56;
 export const PARKED_CARS = 72;
 export const PEDS = 260;
-export const ANIMALS = { dog: 10, coyote: 14, stag: 16, bear: 6 };
+export const ANIMALS = { dog: 10, coyote: 14, stag: 16, bear: 6, horse: 5, cattle: 22 };
 export const HIDDEN_PACKAGES = 30;
 export const DAY_LEN = 480; // seconds per full day
+
+export const AIRPORTS = [
+  { id: 'intl',  name: 'Cascade Intl',   x: 1450, z: 600,   len: 480, w: 26, axis: 'z' },
+  { id: 'dusty', name: 'Dusty Airfield', x: 1150, z: -1250, len: 300, w: 18, axis: 'x', dirt: true },
+  { id: 'hills', name: 'Hollow Strip',   x: -600, z: -820,  len: 260, w: 16, axis: 'x', dirt: true },
+  { id: 'farm',  name: 'Crop Strip',     x: -150, z: -80,   len: 240, w: 16, axis: 'z', dirt: true },
+];
+export const FARMS = [
+  { x: 150,  z: -180, crop: 0xc9a83a },
+  { x: -250, z: -620, crop: 0xb8a030 },
+  { x: 700,  z: -700, crop: 0xa89050, ranch: true },
+  { x: -950, z: 350,  crop: 0xc9b04a },
+];
+export const HEIGHTS = { x0: -700, z0: -420, x1: -980, z1: -760 }; // winding mansion road
 
 export const CHARACTERS = [
   { name: 'MARCUS', shirt: 0x2e4a6e, pants: 0x2e2e38, skin: 0xc9a184, hat: false, x: 430, z: 1000 },

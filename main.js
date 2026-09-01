@@ -18,6 +18,11 @@ import { Missions } from './missions.js';
 import { Radio } from './radio.js';
 import { buildConnectorRoads, WATER_Y } from './terrain.js';
 import { buildLandmarks } from './landmarks.js';
+import { buildAirports } from './airports.js';
+import { buildFarms } from './farms.js';
+import { Birds } from './birds.js';
+import { SPECIALS } from './vehicle.js';
+import { SETTLEMENTS, settlementExtent } from './config.js';
 import { DayNight } from './daynight.js';
 import { CHARACTERS } from './config.js';
 
@@ -58,10 +63,13 @@ window.addEventListener('resize', () => {
 const terrain = buildTerrain(scene);
 const stunts = buildStunts(scene);
 const world = makeWorld(terrain, stunts);
-const city = buildCity(scene, world);
+const city = buildCity(scene, world, terrain);
 world.attachCity(city);
 buildConnectorRoads(scene, world.groundY);
 const landmarks = buildLandmarks(scene, stunts);
+const airports = buildAirports(scene, world);
+const farms = buildFarms(scene, world, terrain);
+const birds = new Birds(scene, terrain.treeSpots, world);
 const traffic = new Traffic(scene, world);
 const peds = new Peds(scene);
 const police = new Police(scene, world);
@@ -74,6 +82,12 @@ const pickups = new Pickups(scene, world);
 const missions = new Missions(scene, world, hud);
 const radio = new Radio();
 missions.bind(peds, traffic);
+for (const p of [...airports.parked, ...farms.parked]) traffic.addParked(p.spec, p.color, p.x, p.z, p.heading);
+// boats: pier, lake shore, open water
+traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[0], 452, 1560, Math.PI, -2.9);
+traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[1], 330, 1580, 2.6, -2.9);
+traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[0], -350, -930, 1.2, -2.9);
+traffic.addParked(SPECIALS.boat, SPECIALS.boat.colors[1], 1180, 1440, 0.4, -2.9);
 
 const daynight = new DayNight(scene, hemi, sun, world);
 const player = new Player(scene, CHARACTERS[0].x, CHARACTERS[0].z);
@@ -277,6 +291,15 @@ function showOverlay(text) {
   overlayT = 2.2;
 }
 
+function nearestRespawn(p) {
+  let best = SETTLEMENTS[0], bd = 1e9;
+  for (const s of SETTLEMENTS) {
+    const d = Math.hypot(p.x - s.cx, p.z - s.cz);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return { x: best.cx + 3, z: best.cz - settlementExtent(best) / 2 + 7 };
+}
+
 function respawn(atX, atZ) {
   if (mode === 'drive' && car) {
     traffic.parked.push({ spec: car.spec, color: car.color, mesh: car.mesh, heading: car.heading, hp: car.hp, dead: car.dead });
@@ -469,6 +492,10 @@ function tick() {
   effects.update(dt);
   radio.setDriving(mode === 'drive');
   landmarks.update(dt);
+  airports.update(dt);
+  farms.update(dt);
+  birds.update(dt, threatPos);
+  traffic.updateHighway(dt, threatPos);
   const nightF = daynight.update(dt, threatPos);
   police.nightF = nightF;
 
@@ -523,10 +550,12 @@ function tick() {
 
   if (ev.busted) {
     showOverlay('BUSTED');
-    respawn(190, 78);
+    const rp = nearestRespawn(threatPos);
+    respawn(rp.x, rp.z);
   } else if (health <= 0) {
     showOverlay('WASTED');
-    respawn(334, 294);
+    const rp = nearestRespawn(threatPos);
+    respawn(rp.x, rp.z);
   }
   hud.setHealth(health);
 

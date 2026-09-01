@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SIGN, WINDFARM, PIER, VINEYARD, SETTLEMENTS } from './config.js';
+import { SPECIALS, makeCarMesh } from './vehicle.js';
 import { groundY } from './terrain.js';
 
 // Big one-off set pieces that make the map read as GTA V.
@@ -97,9 +98,26 @@ export function buildLandmarks(scene, stunts) {
   farm.castShadow = true;
   scene.add(farm);
 
+  // AI boats cruising offshore
+  const boats = [];
+  for (let i = 0; i < 3; i++) {
+    const b = makeCarMesh(SPECIALS.boat, [0xe8e4da, 0x3a6b8a, 0xc9a83a][i]);
+    scene.add(b);
+    boats.push({ mesh: b, x: 200 + i * 500, dir: i % 2 ? 1 : -1, t: i * 2 });
+  }
+
   return {
     update(dt) {
       for (const r of rotors) r.rotation.z += dt * r.userData.rate;
+      for (const b of boats) {
+        b.t += dt;
+        b.x += b.dir * 8 * dt;
+        if (b.x > 1500) b.dir = -1;
+        if (b.x < -1500) b.dir = 1;
+        b.mesh.position.set(b.x, -2.85 + Math.sin(b.t * 1.6) * 0.06, 1640 + Math.sin(b.x * 0.004) * 30);
+        b.mesh.rotation.y = b.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+        b.mesh.rotation.z = Math.sin(b.t * 2.1) * 0.03;
+      }
     },
   };
 }

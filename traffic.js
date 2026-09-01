@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { SETTLEMENTS, settlementOrigin, settlementExtent, PITCH, ROAD_W, BLOCK_W, LANE_OFF, GOLF, TRAFFIC_CARS, PARKED_CARS, PEDS } from './config.js';
+import { SETTLEMENTS, settlementOrigin, settlementExtent, PITCH, ROAD_W, BLOCK_W, LANE_OFF, GOLF, TRAFFIC_CARS, PARKED_CARS, PEDS, CONNECTORS, FARMS } from './config.js';
 import { CATALOG, makeCarMesh } from './vehicle.js';
+import * as VEH from './vehicle.js';
 
 const rand = Math.random;
 const pick = (arr) => arr[(rand() * arr.length) | 0];
@@ -29,6 +30,89 @@ export class Traffic {
     this.parked = [];
     for (let i = 0; i < TRAFFIC_CARS; i++) this.spawnMover();
     this.spawnParked();
+    this.buildHighway();
+  }
+
+  // ---- country-road traffic between the settlements ----
+  buildHighway() {
+    this.hwSegs = CONNECTORS.map((c) => ({ ...c, len: Math.hypot(c.x1 - c.x0, c.z1 - c.z0) }));
+    this.hwAdj = new Map();
+    const key = (x, z) => `${x},${z}`;
+    this.hwSegs.forEach((sg, i) => {
+      for (const [x, z] of [[sg.x0, sg.z0], [sg.x1, sg.z1]]) {
+        const k = key(x, z);
+        if (!this.hwAdj.has(k)) this.hwAdj.set(k, []);
+        this.hwAdj.get(k).push(i);
+      }
+    });
+    this.highway = [];
+    const { SPECIALS } = VEH;
+    for (let i = 0; i < 20; i++) {
+      const si = (Math.random() * this.hwSegs.length) | 0;
+      const sg = this.hwSegs[si];
+      const rural = sg.z0 < 300 && sg.z1 < 300;
+      const pool = rural
+        ? [CATALOG[0], CATALOG.find((c) => c.name === 'Ranchero'), CATALOG.find((c) => c.name === 'Ranchero'), SPECIALS.tractor, CATALOG[6]]
+        : CATALOG;
+      const spec = pool[(Math.random() * pool.length) | 0];
+      const car = {
+        seg: si, t: Math.random(), dir: Math.random() < 0.5 ? 1 : -1,
+        spec, color: pick(spec.colors),
+        mesh: makeCarMesh(spec, pick(spec.colors)),
+        speed: 0, hp: 100, dead: false, stun: 0, wheelSpin: 0, highway: true,
+      };
+      car.mesh.rotation.order = 'YXZ';
+      this.scene.add(car.mesh);
+      this.highway.push(car);
+    }
+  }
+
+  updateHighway(dt, playerPos) {
+    const key = (x, z) => `${x},${z}`;
+    for (const c of this.highway) {
+      if (c.dead) continue;
+      if (c.stun > 0) { c.stun -= dt; continue; }
+      const sg = this.hwSegs[c.seg];
+      const top = c.spec.kind === 'tractor' ? 7 : 13;
+      const dP = c.mesh.position.distanceTo(playerPos);
+      let want = top;
+      if (dP < 10) {
+        const fx = -Math.sin(c.mesh.rotation.y), fz = -Math.cos(c.mesh.rotation.y);
+        if ((playerPos.x - c.mesh.position.x) * fx + (playerPos.z - c.mesh.position.z) * fz > 0) want = 0;
+      }
+      c.speed += (want - c.speed) * Math.min(1, dt * (want > c.speed ? 1.0 : 6));
+      c.t += (c.dir * c.speed * dt) / sg.len;
+      if (c.t > 1 || c.t < 0) {
+        const ex = c.t > 1 ? sg.x1 : sg.x0;
+        const ez = c.t > 1 ? sg.z1 : sg.z0;
+        const options = this.hwAdj.get(key(ex, ez)).filter((i) => i !== c.seg);
+        if (options.length && Math.random() < 0.8) {
+          c.seg = options[(Math.random() * options.length) | 0];
+          const ns = this.hwSegs[c.seg];
+          const atStart = ns.x0 === ex && ns.z0 === ez;
+          c.dir = atStart ? 1 : -1;
+          c.t = atStart ? 0 : 1;
+        } else {
+          c.dir *= -1;
+          c.t = Math.max(0, Math.min(1, c.t));
+        }
+      }
+      const sg2 = this.hwSegs[c.seg];
+      const bx = sg2.x0 + (sg2.x1 - sg2.x0) * c.t;
+      const bz = sg2.z0 + (sg2.z1 - sg2.z0) * c.t;
+      // lane offset perpendicular to travel
+      const L = sg2.len || 1;
+      const ux = (sg2.x1 - sg2.x0) / L * c.dir, uz = (sg2.z1 - sg2.z0) / L * c.dir;
+      const x = bx + uz * LANE_OFF, z = bz - ux * LANE_OFF;
+      c.mesh.position.set(x, this.world.groundY(x, z, c.mesh.position.y || 1e9), z);
+      const targetH = Math.atan2(-ux, -uz);
+      let dh = targetH - c.mesh.rotation.y;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      c.mesh.rotation.y += dh * Math.min(1, dt * 5);
+      c.wheelSpin += c.speed * dt * 2.4;
+      for (const w of c.mesh.userData.wheels) w.wheel.rotation.x = c.wheelSpin;
+    }
   }
 
   spawnMover() {
@@ -53,6 +137,15 @@ export class Traffic {
     let x, z;
     if (c.axis === 'z') { x = cross; z = c.along; } else { x = c.along; z = cross; }
     c.mesh.position.set(x, this.world.groundY(x, z, c.mesh.position.y || 1e9), z);
+  }
+
+  addParked(spec, color, x, z, heading, yOverride) {
+    const mesh = makeCarMesh(spec, color);
+    mesh.rotation.order = 'YXZ';
+    mesh.position.set(x, yOverride ?? this.world.groundY(x, z), z);
+    mesh.rotation.y = heading;
+    this.scene.add(mesh);
+    this.parked.push({ spec, color, mesh, heading, hp: 100, dead: false });
   }
 
   spawnParked() {
@@ -130,7 +223,7 @@ export class Traffic {
 
   nearest(pos, range) {
     let best = null, bd = range;
-    for (const list of [this.cars, this.parked]) {
+    for (const list of [this.cars, this.parked, this.highway]) {
       for (const c of list) {
         if (c.dead) continue;
         const d = c.mesh.position.distanceTo(pos);
@@ -160,7 +253,7 @@ export class Traffic {
     return null;
   }
 
-  allVehicles() { return [...this.cars, ...this.parked]; }
+  allVehicles() { return [...this.cars, ...this.parked, ...this.highway]; }
 }
 
 // ---------------- Pedestrians (instanced crowd, typed) ----------------
@@ -184,6 +277,8 @@ function pointOnPerimeter(P, p) {
 
 const URBAN_SHIRTS = [0x35597a, 0x7a3548, 0x4a6b3a, 0x8a7030, 0x555f6b, 0x6b4a7a, 0x9a6a3a, 0x3a7a72];
 const REDNECK_SHIRTS = [0x8a3a2a, 0x3a5a8a, 0x7a6a2a];  // plaid-adjacent
+const HILLBILLY_SHIRTS = [0x3a4a7a, 0x4a5a8a];           // denim overalls
+const VAQUERO_SHIRTS = [0xe8e0d0, 0xd8c8a8, 0xb03a2a];
 const GOLFER_SHIRTS = [0xe8b0c0, 0x9ad0e8, 0xd8e8a0, 0xf0e0a0];
 const PANTS = [0x3a3a44, 0x4c443c, 0x2e3a4a, 0x5a4a3a];
 const SKINS = [0xc9a184, 0xa8825f, 0x8a6a4e, 0x6e4a34, 0xd9b49a];
@@ -207,11 +302,11 @@ export class Peds {
       scene.add(m);
       return m;
     };
-    const geoT = new THREE.BoxGeometry(0.62, 0.72, 0.34);
-    const geoH = new THREE.BoxGeometry(0.34, 0.36, 0.34);
-    const geoLeg = new THREE.BoxGeometry(0.22, 0.76, 0.24); geoLeg.translate(0, -0.38, 0);
-    const geoArm = new THREE.BoxGeometry(0.16, 0.64, 0.2); geoArm.translate(0, -0.28, 0);
-    const geoHat = new THREE.CylinderGeometry(0.34, 0.42, 0.14, 8);
+    const geoT = new THREE.BoxGeometry(0.6, 0.72, 0.34);
+    const geoH = new THREE.SphereGeometry(0.21, 10, 8);
+    const geoLeg = new THREE.CylinderGeometry(0.1, 0.115, 0.76, 8); geoLeg.translate(0, -0.38, 0);
+    const geoArm = new THREE.CylinderGeometry(0.075, 0.09, 0.64, 8); geoArm.translate(0, -0.28, 0);
+    const geoHat = new THREE.CylinderGeometry(0.3, 0.42, 0.14, 9);
     this.torso = mk(geoT); this.head = mk(geoH);
     this.legL = mk(geoLeg); this.legR = mk(geoLeg);
     this.armL = mk(geoArm); this.armR = mk(geoArm);
@@ -221,14 +316,19 @@ export class Peds {
     this.list = [];
     const col = new THREE.Color();
     for (let n = 0; n < PEDS; n++) {
-      // 120 city, 50 palms, 20 port, 40 rednecks (Hickory + Dusty Palms), 30 golfers
+      // 110 city, 45 palms, 20 port, 25 rednecks, 20 hillbillies, 25 vaqueros, 15 golfers
       let kind = 'urban', home = null;
-      if (n < 120) home = SETTLEMENTS[0];
-      else if (n < 170) home = SETTLEMENTS[1];
-      else if (n < 190) home = SETTLEMENTS[2];
-      else if (n < 230) { kind = 'redneck'; }
+      if (n < 110) home = SETTLEMENTS[0];
+      else if (n < 155) home = SETTLEMENTS[1];
+      else if (n < 175) home = SETTLEMENTS[2];
+      else if (n < 200) { kind = 'redneck'; }
+      else if (n < 220) { kind = 'hillbilly'; }
+      else if (n < 245) { kind = 'vaquero'; }
       else { kind = 'golfer'; }
-      const shirts = kind === 'redneck' ? REDNECK_SHIRTS : kind === 'golfer' ? GOLFER_SHIRTS : URBAN_SHIRTS;
+      const shirts = kind === 'redneck' ? REDNECK_SHIRTS
+        : kind === 'hillbilly' ? HILLBILLY_SHIRTS
+        : kind === 'vaquero' ? VAQUERO_SHIRTS
+        : kind === 'golfer' ? GOLFER_SHIRTS : URBAN_SHIRTS;
       const shirt = pick(shirts), pants = pick(PANTS), skin = pick(SKINS);
       this.torso.setColorAt(n, col.setHex(shirt));
       this.armL.setColorAt(n, col.setHex(shirt));
@@ -236,7 +336,11 @@ export class Peds {
       this.legL.setColorAt(n, col.setHex(pants));
       this.legR.setColorAt(n, col.setHex(pants));
       this.head.setColorAt(n, col.setHex(skin));
-      this.hat.setColorAt(n, col.setHex(kind === 'redneck' ? 0xc9b26a : 0xe84a4a));
+      this.hat.setColorAt(n, col.setHex(
+        kind === 'redneck' ? 0xe84a4a
+        : kind === 'hillbilly' ? 0xc9b26a
+        : kind === 'vaquero' ? 0x4a3a2a
+        : 0xe84a4a));
 
       const p = {
         idx: n, kind, home,
@@ -263,9 +367,11 @@ export class Peds {
   }
 
   homeCenter(p) {
-    if (p.kind === 'redneck') {
-      const h = p.idx % 2 === 0 ? DUSTY : HICKORY;
-      return { x: h.cx, z: h.cz, r: h === DUSTY ? 150 : 110 };
+    if (p.kind === 'redneck') return { x: DUSTY.cx, z: DUSTY.cz, r: 150 };
+    if (p.kind === 'hillbilly') return { x: HICKORY.cx, z: HICKORY.cz, r: 130 };
+    if (p.kind === 'vaquero') {
+      const f = FARMS[p.idx % FARMS.length];
+      return { x: f.x, z: f.z, r: 100 };
     }
     return { x: GOLF.x, z: GOLF.z, r: GOLF.r - 15 };
   }
@@ -407,7 +513,7 @@ export class Peds {
       this.part(this.armL, p.idx, -0.42, 1.44, 0, golferIdle ? -1.4 - s : -s * 0.8);
       this.part(this.armR, p.idx, 0.42, 1.44, 0, golferIdle ? -1.4 - s : s * 0.8);
       // hat only for rednecks + golfers
-      const hatScale = p.kind === 'urban' || hidden ? 0.0001 : p.kind === 'golfer' ? 0.75 : 1.1;
+      const hatScale = p.kind === 'urban' || hidden ? 0.0001 : p.kind === 'golfer' ? 0.75 : p.kind === 'vaquero' ? 1.55 : 1.1;
       _L.makeScale(hatScale, hatScale, hatScale);
       _L.setPosition(0, 1.96, 0);
       _P.multiplyMatrices(_M, _L);

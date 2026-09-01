@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SETTLEMENTS, settlementOrigin, PITCH, ROAD_W, DAY_LEN } from './config.js';
 import { setNightLights } from './vehicle.js';
+import { setWindowsNight } from './city.js';
 
 const DAY_SKY = new THREE.Color(0x87b5d4);
 const DUSK_SKY = new THREE.Color(0xd88a5a);
@@ -87,6 +88,7 @@ export class DayNight {
     this.stars.position.set(anchor.x, 0, anchor.z);
     this.glowMat.color.setHex(this.nightF > 0.35 ? 0xffd88a : 0x554a2a);
     setNightLights(this.nightF > 0.35);
+    setWindowsNight(this.nightF > 0.35);
     return this.nightF;
   }
 }

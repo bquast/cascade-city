@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementExtent, settlementOrigin, OCEAN, MOUNTAIN, DESERT, VINEYARD, PIER } from './config.js';
+import { WORLD_HALF, LAKE, GOLF, CHANNEL, CONNECTORS, SETTLEMENTS, settlementExtent, settlementOrigin, OCEAN, MOUNTAIN, DESERT, VINEYARD, PIER, AIRPORTS, FARMS, HEIGHTS } from './config.js';
 
 // ---- Deterministic value noise ----
 function hash2(x, y) {
@@ -34,6 +34,32 @@ const S_RECTS = SETTLEMENTS.map((s) => {
   const o = settlementOrigin(s), e = settlementExtent(s);
   return { ...s, minX: o.x, maxX: o.x + e, minZ: o.z, maxZ: o.z + e };
 });
+// airports + farms flatten and clear the same way settlements do
+for (const A of AIRPORTS) {
+  const hl = A.len / 2 + 24, hw = A.w / 2 + 24;
+  S_RECTS.push(A.axis === 'z'
+    ? { amp: 0.06, minX: A.x - hw, maxX: A.x + hw, minZ: A.z - hl, maxZ: A.z + hl }
+    : { amp: 0.06, minX: A.x - hl, maxX: A.x + hl, minZ: A.z - hw, maxZ: A.z + hw });
+}
+for (const F of FARMS) {
+  S_RECTS.push({ amp: 0.14, minX: F.x - 110, maxX: F.x + 110, minZ: F.z - 90, maxZ: F.z + 90 });
+}
+// the winding Heights road: approximate its curve with short flat segments
+export const HEIGHTS_PTS = [];
+{
+  const N = 14;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    HEIGHTS_PTS.push({
+      x: HEIGHTS.x0 + (HEIGHTS.x1 - HEIGHTS.x0) * t + Math.sin(t * Math.PI * 3) * 55,
+      z: HEIGHTS.z0 + (HEIGHTS.z1 - HEIGHTS.z0) * t,
+    });
+  }
+}
+const HEIGHT_SEGS = [];
+for (let i = 0; i < HEIGHTS_PTS.length - 1; i++) {
+  HEIGHT_SEGS.push({ x0: HEIGHTS_PTS[i].x, z0: HEIGHTS_PTS[i].z, x1: HEIGHTS_PTS[i + 1].x, z1: HEIGHTS_PTS[i + 1].z });
+}
 
 // Spatial index: which settlements/connectors can affect a 64u cell.
 // Keeps ampAt exact while skipping ~95% of the distance tests.
@@ -52,6 +78,9 @@ const AGRID = new Map();
         if (rectDist(mx, mz, s.minX, s.maxX, s.minZ, s.maxZ) < 100 + cellR) rects.push(s);
       }
       for (const c of CONNECTORS) {
+        if (segDist(mx, mz, c) < 40 + cellR) segs.push(c);
+      }
+      for (const c of HEIGHT_SEGS) {
         if (segDist(mx, mz, c) < 40 + cellR) segs.push(c);
       }
       if (rects.length || segs.length) AGRID.set(cx * 4096 + cz, { rects, segs });
@@ -336,7 +365,7 @@ export function buildTerrain(scene) {
     return { x: nx, z: nz };
   }
 
-  return { treeResolve, forest };
+  return { treeResolve, forest, addCollider, treeSpots: spots };
 }
 
 // Conforming road ribbon along an axis-aligned strip; y sampled from gy(x,z,+inf).
@@ -360,6 +389,37 @@ export function ribbon(scene, gy, x0, z0, x1, z1, width, color, lift = 0.06) {
       const b = i * 2;
       idx.push(b - 2, b - 1, b, b - 1, b + 1, b);
     }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+// polyline road ribbon that follows terrain (for winding roads)
+export function curveRibbon(scene, gy, pts, width, color, lift = 0.07) {
+  const verts = [], idx = [];
+  let vi = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const pn = pts[Math.min(pts.length - 1, i + 1)];
+    const pp = pts[Math.max(0, i - 1)];
+    let dx = pn.x - pp.x, dz = pn.z - pp.z;
+    const L = Math.hypot(dx, dz) || 1;
+    const px = -dz / L * width / 2, pz = dx / L * width / 2;
+    for (const sd of [-1, 1]) {
+      const vx = p.x + px * sd, vz = p.z + pz * sd;
+      verts.push(vx, gy(vx, vz, 1e9) + lift, vz);
+    }
+    if (i > 0) {
+      const b = vi * 2;
+      idx.push(b - 2, b - 1, b, b - 1, b + 1, b);
+    }
+    vi++;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
